@@ -162,7 +162,7 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> bo
 
 def main() -> int:
     print("================================================================================")
-    print("OPSRECALL — HINDSIGHT CONNECTION & INTEGRATION VERIFICATION")
+    print("OPSRECALL -- HINDSIGHT CONNECTION & INTEGRATION VERIFICATION")
     print("================================================================================")
     print(f"Base URL:      {settings.HINDSIGHT_BASE_URL}")
     print(f"Demo Bank ID:  {settings.HINDSIGHT_BANK_ID}")

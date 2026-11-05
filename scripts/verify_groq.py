@@ -22,7 +22,7 @@ from config import settings
 
 def main() -> int:
     print("================================================================================")
-    print("OPSRECALL — GROQ MODEL AVAILABILITY & CAPABILITY VERIFICATION")
+    print("OPSRECALL -- GROQ MODEL AVAILABILITY & CAPABILITY VERIFICATION")
     print("================================================================================")
     print(f"Target Model Configured: {settings.GROQ_MODEL}")
     print(f"API Key Status:          {'[CONFIGURED]' if settings.is_groq_configured() else '[MISSING]'}")
