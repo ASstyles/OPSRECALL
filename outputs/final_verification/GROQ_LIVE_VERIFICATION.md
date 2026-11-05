@@ -88,3 +88,4 @@ API Key Status:          [MISSING]
    ```
 2. Run `python scripts/verify_groq.py` to execute account authentication and smoke testing.
 3. Run `python -m pytest tests/test_live_integration.py -k test_live_groq_generation_structured_json -v`.
+

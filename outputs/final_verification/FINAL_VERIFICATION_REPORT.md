@@ -135,3 +135,4 @@ The OPSRECALL software codebase, algorithms, data structures, automated test sui
 However, in accordance with the strict audit mandate prohibiting fabricated cloud results, the system cannot be designated as fully live-ready until actual user credentials for **Hindsight Cloud** (`HINDSIGHT_API_KEY`) and **Groq Cloud** (`GROQ_API_KEY`) are populated in `.env`. 
 
 Once live keys are added to `.env`, all 35 tests (including the 3 skipped live integration tests) will execute, and the UI badges will immediately transition from `OFFLINE PREVIEW` to `LIVE PERSISTENT MEMORY (ONLINE)` and `GROQ: ONLINE`. In the interim, OPSRECALL executes flawlessly in full offline demonstration mode.
+

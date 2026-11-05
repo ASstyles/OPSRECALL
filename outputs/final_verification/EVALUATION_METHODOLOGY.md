@@ -100,3 +100,4 @@ Rather than relying on an opaque single composite number, OPSRECALL scores inves
 ## 5. Statistical Disclosure
 
 The 12 evaluation scenarios are curated, high-fidelity synthetic benchmark cases designed to test specific operational capabilities (change correlation, negative experience retention, distractor resistance, and holdout discrimination). They provide deterministic verification of architectural capabilities, but should not be cited as claims of large-sample statistical significance across arbitrary production workloads.
+

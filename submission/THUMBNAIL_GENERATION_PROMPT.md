@@ -40,3 +40,4 @@ A cinematic, professional 16:9 widescreen thumbnail for a cutting-edge DevOps an
 ```text
 cartoonish, blurry, noisy background, illegible text, low resolution, messy wiring, messy hands, cluttered composition, overly bright white background, stock photography clichés.
 ```
+
