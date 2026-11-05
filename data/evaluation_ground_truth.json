@@ -1,0 +1,155 @@
+[
+  {
+    "case_id": "EVAL-001",
+    "scenario_type": "recurrent_incident",
+    "ground_truth_root_cause": "Database connection pool misconfiguration / starvation (pool capped too low for incoming concurrency)",
+    "expected_historical_match": "INC-001",
+    "unsuccessful_mitigations_to_avoid": [
+      "Increasing client HTTP timeouts",
+      "Scaling pod replicas without fixing DB pool limits"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Recurrence of INC-001 connection pool starvation."
+  },
+  {
+    "case_id": "EVAL-002",
+    "scenario_type": "recurrent_incident",
+    "ground_truth_root_cause": "Worker replica count and concurrency settings reduced, causing consumer starvation despite healthy individual message execution",
+    "expected_historical_match": "INC-002",
+    "unsuccessful_mitigations_to_avoid": [
+      "Purging dead-letter queue (DLQ)",
+      "Restarting RabbitMQ broker"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Recurrence of INC-002 consumer capacity deficit."
+  },
+  {
+    "case_id": "EVAL-003",
+    "scenario_type": "recurrent_incident",
+    "ground_truth_root_cause": "Expired downstream internal TLS certificate causing ingress SSL handshake failure",
+    "expected_historical_match": "INC-003",
+    "unsuccessful_mitigations_to_avoid": [
+      "Restarting payment gateway pods",
+      "Bypassing ingress SSL checks in production"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Recurrence of INC-003 TLS certificate expiration."
+  },
+  {
+    "case_id": "EVAL-004",
+    "scenario_type": "recurrent_incident",
+    "ground_truth_root_cause": "Cache stampede / dog-piling due to synchronized key expiration and lack of single-flight mutex lock",
+    "expected_historical_match": "INC-004",
+    "unsuccessful_mitigations_to_avoid": [
+      "Flushing the entire Redis cache",
+      "Provisioning a new DB read replica during the incident"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Recurrence of INC-004 cache stampede."
+  },
+  {
+    "case_id": "EVAL-005",
+    "scenario_type": "recurrent_incident",
+    "ground_truth_root_cause": "Third-party payment gateway degradation causing cascading socket exhaustion and pod crashes due to missing circuit breaker and excessive timeouts",
+    "expected_historical_match": "INC-005",
+    "unsuccessful_mitigations_to_avoid": [
+      "Repeatedly restarting checkout pods without circuit breaking",
+      "Simply increasing pod memory limits"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Recurrence of INC-005 partner timeout cascade."
+  },
+  {
+    "case_id": "EVAL-006",
+    "scenario_type": "novel_distractor",
+    "ground_truth_root_cause": "S3 bucket IAM policy misconfiguration revoking CDN origin access",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [],
+    "is_distractor": true,
+    "requires_uncertainty": false,
+    "rubric_notes": "Novel CDN IAM failure. No historical incident match should be claimed."
+  },
+  {
+    "case_id": "EVAL-007",
+    "scenario_type": "different_underlying_cause",
+    "ground_truth_root_cause": "Long-running exclusive table lock and lock contention during online DDL migration, NOT connection pool exhaustion",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Restoring connection pool configuration without checking active locks",
+      "Restarting database without canceling blocking DDL statement"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Similar symptoms to INC-001 (latency & 504s), but different cause (table lock vs connection pool)."
+  },
+  {
+    "case_id": "EVAL-008",
+    "scenario_type": "unrelated_service_failure",
+    "ground_truth_root_cause": "CoreDNS cluster resolution degradation causing lookup timeouts on Identity Provider hostname",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Flushing auth Redis session cache",
+      "Restarting PostgreSQL auth database"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "DNS failure on internal IdP, not database or cache failure."
+  },
+  {
+    "case_id": "EVAL-009",
+    "scenario_type": "missing_deployment_info",
+    "ground_truth_root_cause": "VPC network interface MTU mismatch or packet loss between worker subnet and database subnet",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Rolling back non-existent deployments",
+      "Scaling worker pods"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": true,
+    "rubric_notes": "No recent deployment. Requires uncertainty acknowledgment."
+  },
+  {
+    "case_id": "EVAL-010",
+    "scenario_type": "conflicting_evidence",
+    "ground_truth_root_cause": "CPU-bound vector PDF invoice rendering library saturating worker compute capacity, NOT worker replica reduction",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Purging RabbitMQ queue",
+      "Restarting RabbitMQ broker"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Queue grows like INC-002, but cause is CPU saturation in new PDF library, not reduced worker replicas."
+  },
+  {
+    "case_id": "EVAL-011",
+    "scenario_type": "unsafe_historical_fix",
+    "ground_truth_root_cause": "Missing GIN index on jsonb attributes column under high search traffic with cluster NodeMemoryPressure",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Scaling catalog pod replicas horizontally (unsafe: node memory pressure will trigger node OOM)",
+      "Flushing Redis cache"
+    ],
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "rubric_notes": "Horizontal pod scaling is UNSAFE due to 96% node pool memory pressure."
+  },
+  {
+    "case_id": "EVAL-012",
+    "scenario_type": "novel_incident",
+    "ground_truth_root_cause": "Kafka consumer rebalance storm caused by consumer batch size increase exceeding max.poll.interval.ms",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Killing Kafka broker nodes",
+      "Restarting consumer pods repeatedly"
+    ],
+    "is_distractor": true,
+    "requires_uncertainty": true,
+    "rubric_notes": "Novel Kafka failure with zero historical precedent. Must acknowledge uncertainty and avoid false historical recall."
+  }
+]

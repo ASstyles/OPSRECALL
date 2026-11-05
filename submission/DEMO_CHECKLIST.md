@@ -20,7 +20,13 @@ This checklist provides a step-by-step sequence for judges and engineers to repe
   ```bash
   python -m pytest -q
   ```
-  *Expected Output: `26 passed, 3 skipped` with 0 failures.*
+  *Expected Output: `32 passed, 3 skipped` with 0 failures.*
+
+- [ ] **Verify Model and Memory Endpoints**:
+  ```bash
+  python scripts/verify_groq.py
+  python scripts/verify_hindsight.py
+  ```
 
 ---
 
@@ -31,7 +37,7 @@ This checklist provides a step-by-step sequence for judges and engineers to repe
 python scripts/verify_hindsight.py
 ```
 - **What to verify**:
-  - Reports Base URL (`https://api.hindsight.vectorize.io`) and Bank ID (`opsrecall-demo`).
+  - Reports Base URL (`https://api.hindsight.vectorize.io`) and Bank ID (`opsrecall-demo` / `opsrecall-live-tests`).
   - Displays genuine status: `CONNECTED` (if key set) or `NOT_CONFIGURED` (in offline mode).
   - Never fabricates a false connected status.
 
@@ -98,29 +104,18 @@ streamlit run app.py
 ### Step 7: Incident Learning Loop (Dashboard Tab 5)
 - **Actions**:
   - Select **`Learning Center`**.
-  - Select `INC-001`.
-  - Review the verified resolution, root cause, and failed approaches.
-  - Click **`Confirm Resolution & Retain into Hindsight`**.
+  - Select an active incident or submit a new resolution for `INC-001`.
+  - Provide human verification and click **`Confirm & Retain in Memory`**.
 - **What to highlight**:
-  - Green confirmation banner showing retention into Hindsight bank `opsrecall-demo` with operation ID.
-  - Audit record saved to local SQLite database.
+  - Experience is formatted with structured metadata and committed to Hindsight.
+  - Shows that human SRE verification is required before operational memory is updated.
 
 ---
 
-### Step 8: Reproducible Benchmark in Evaluation Lab (Dashboard Tab 6)
+### Step 8: Multi-Dimensional Evaluation Lab (Dashboard Tab 6)
 - **Actions**:
   - Select **`Evaluation Lab`**.
-  - Click **`Run Full Benchmark Suite`**.
+  - Click **`Run Benchmark Evaluation`**.
 - **What to highlight**:
-  - Real-time execution across 6 benchmark cases (5 recurrences + 1 distractor).
-  - Plotly bar chart comparing Memory OFF vs Memory ON scores per case.
-  - Points out that on distractor case `EVAL-006` (`cdn-edge`), both score 100% (no false hallucination), while on recurrent outages, Memory ON delivers a +40 point advantage by preventing failed fixes.
-
----
-
-### Step 9: Architecture Review (Dashboard Tab 7)
-- **Actions**:
-  - Select **`Architecture & About`**.
-  - Show the generated architecture diagram (`assets/architecture.png`).
-  - Reiterate the core philosophy: *Hindsight is memory; LLM is reasoning. Decoupling them enables enterprise-grade operational resilience.*
-
+  - Evaluates 12 scenarios across 7 distinct dimensions with complete ground-truth anti-leakage isolation.
+  - Shows +16.7% Top-1 root cause accuracy gain, +41.7% relevance retrieval gain, and +25.0 points improvement on recurrent incident resolution.

@@ -43,33 +43,41 @@ class LearningEngine:
         Record verified resolution and retain knowledge into Hindsight.
 
         Workflow:
-        1. Create ResolutionFeedback object.
-        2. Update existing incident record with confirmed details.
-        3. Format and retain verified experience into Hindsight Cloud.
-        4. Record resolution in local SQLite audit table.
-        5. Return comprehensive retention confirmation.
+        1. Validate inputs (ensure non-empty root cause and resolution).
+        2. Create ResolutionFeedback object.
+        3. Update existing incident record with confirmed details.
+        4. Format and retain verified experience into Hindsight Cloud (idempotent via document_id).
+        5. Record resolution in local SQLite audit table.
+        6. Return comprehensive retention confirmation.
         """
+        if not incident_id or not incident_id.strip():
+            raise ValueError("Incident ID cannot be empty.")
+        if not verified_root_cause or not verified_root_cause.strip():
+            raise ValueError("Verified root cause must be specified before confirming resolution.")
+        if not successful_resolution or not successful_resolution.strip():
+            raise ValueError("Successful resolution must be specified before confirming resolution.")
+
         # Fetch original incident or create a stub if custom
-        incident = self.incident_engine.get_incident(incident_id)
+        incident = self.incident_engine.get_incident(incident_id.strip())
         if not incident:
             incident = Incident(
-                incident_id=incident_id,
-                incident_title=f"Resolved Incident {incident_id}",
+                incident_id=incident_id.strip(),
+                incident_title=f"Resolved Incident {incident_id.strip()}",
                 affected_service="general-service",
                 severity="SEV-2",
                 symptoms=["Operational anomaly resolved by human engineer"],
             )
 
         # Update incident record with human-confirmed truths
-        incident.actual_verified_root_cause = verified_root_cause
-        incident.successful_mitigation = successful_resolution
-        incident.resolution = successful_resolution
+        incident.actual_verified_root_cause = verified_root_cause.strip()
+        incident.successful_mitigation = successful_resolution.strip()
+        incident.resolution = successful_resolution.strip()
         incident.resolution_outcome = "Human-Verified and Resolved"
         incident.failed_mitigation_attempts = list(
-            set(incident.failed_mitigation_attempts + failed_approaches)
+            set(incident.failed_mitigation_attempts + [f.strip() for f in failed_approaches if f.strip()])
         )
-        incident.verification_evidence = verification_evidence
-        incident.lessons_learned = lessons_learned
+        incident.verification_evidence = verification_evidence.strip()
+        incident.lessons_learned = lessons_learned.strip()
 
         # Save updated incident to SQLite
         self.incident_engine.save_incident(incident)

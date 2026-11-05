@@ -259,7 +259,7 @@ if selected_page == "Command Center":
                 },
                 inplace=True,
             )
-            st.dataframe(df_svc, hide_index=True, use_container_width=True)
+            st.dataframe(df_svc, hide_index=True)
         else:
             st.info("No service telemetry records found.")
 
@@ -281,7 +281,7 @@ if selected_page == "Command Center":
                 },
                 inplace=True,
             )
-            st.dataframe(df_recent, hide_index=True, use_container_width=True)
+            st.dataframe(df_recent, hide_index=True)
         else:
             st.info("No investigations recorded yet.")
 
@@ -389,7 +389,7 @@ elif selected_page == "Incident Console":
         if metrics:
             st.markdown("#### 📊 Metric Snapshot")
             m_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
-            st.dataframe(m_df, hide_index=True, use_container_width=True)
+            st.dataframe(m_df, hide_index=True)
 
     st.markdown("---")
     st.markdown("### Ready to Investigate")
@@ -758,7 +758,7 @@ elif selected_page == "Evaluation Lab":
         run_bench = st.button("▶ Run Full Benchmark Suite", type="primary")
 
     if run_bench:
-        with st.spinner("Executing evaluation across all 6 benchmark scenarios..."):
+        with st.spinner("Executing evaluation across all 12 benchmark scenarios..."):
             summary = eval_framework.run_benchmark()
             st.session_state["benchmark_summary"] = summary
             latest_run = db.get_latest_evaluation_run()
@@ -771,30 +771,38 @@ elif selected_page == "Evaluation Lab":
 
     if summary:
         metrics = summary.get("metrics", {})
-        acc = metrics.get("accuracy", {})
-        avoid = metrics.get("failed_fix_avoidance", {})
-        avg_score = metrics.get("average_score", {})
+        acc = metrics.get("top_3_root_cause_accuracy", metrics.get("accuracy", {}))
+        avoid = metrics.get("failed_mitigation_avoidance_rate", metrics.get("failed_fix_avoidance", {}))
+        avg_score = metrics.get("composite_score", metrics.get("average_score", {}))
+        retrieval = metrics.get("relevant_memory_retrieval_rate", {})
+        false_rec = metrics.get("false_historical_recall_rate", {})
 
         st.markdown(f"**Benchmark Run ID:** `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}`")
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.metric(
                 "Top-3 Root Cause Accuracy",
-                f"{acc.get('memory_enabled')}%",
-                delta=f"{acc.get('memory_enabled') - acc.get('memory_disabled'):.1f}% vs Memory OFF",
+                f"{acc.get('memory_enabled', 0)}%",
+                delta=f"{acc.get('memory_enabled', 0) - acc.get('memory_disabled', 0):.1f}% vs Memory OFF",
             )
         with c2:
             st.metric(
                 "Failed Mitigation Avoidance",
-                f"{avoid.get('memory_enabled')}%",
-                delta=f"{avoid.get('memory_enabled') - avoid.get('memory_disabled'):.1f}% vs Memory OFF",
+                f"{avoid.get('memory_enabled', 0)}%",
+                delta=f"{avoid.get('memory_enabled', 0) - avoid.get('memory_disabled', 0):.1f}% vs Memory OFF",
             )
         with c3:
             st.metric(
+                "Relevant Memory Retrieval",
+                f"{retrieval.get('memory_enabled', 0)}%",
+                delta=f"{retrieval.get('memory_enabled', 0) - retrieval.get('memory_disabled', 0):.1f}% vs Memory OFF",
+            )
+        with c4:
+            st.metric(
                 "Composite Score (/100)",
-                f"{avg_score.get('memory_enabled')}",
-                delta=f"+{avg_score.get('memory_enabled') - avg_score.get('memory_disabled'):.1f} vs Memory OFF",
+                f"{avg_score.get('memory_enabled', 0)}",
+                delta=f"+{avg_score.get('memory_enabled', 0) - avg_score.get('memory_disabled', 0):.1f} vs Memory OFF",
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -822,7 +830,7 @@ elif selected_page == "Evaluation Lab":
                 y="Score",
                 color="Mode",
                 barmode="group",
-                title="Per-Case Performance Comparison (Score 0-100)",
+                title="Per-Case Performance Comparison across 12 Scenarios (Score 0-100)",
                 color_discrete_map={"Memory OFF": "#64748b", "Memory ON (Hindsight)": "#06b6d4"},
             )
             fig.update_layout(
@@ -831,16 +839,16 @@ elif selected_page == "Evaluation Lab":
                 font_color="#e2e8f0",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig)
 
             # Detailed per-case table
-            st.subheader("📋 Detailed Per-Scenario Scorecard")
+            st.subheader("📋 Detailed Per-Scenario Scorecard (Isolated Ground Truth)")
             case_rows = []
             for c in cases:
                 case_rows.append({
                     "Case ID": c["case_id"],
                     "Service": c["service"],
-                    "Scenario Type": "Distractor (Novel)" if c["is_distractor"] else "Recurrent Incident",
+                    "Scenario Type": c.get("scenario_type", "recurrent_incident"),
                     "Score (OFF)": f"{c['disabled']['score']:.1f}",
                     "Score (ON)": f"{c['enabled']['score']:.1f}",
                     "Failed Fix Avoided (OFF)": "Yes" if c["disabled"]["avoided_failed"] else "No",
@@ -848,7 +856,7 @@ elif selected_page == "Evaluation Lab":
                     "Historical Links (ON)": ", ".join(c["enabled"].get("historical_refs", [])) or "None (Correct)",
                 })
             df_cases = pd.DataFrame(case_rows)
-            st.dataframe(df_cases, hide_index=True, use_container_width=True)
+            st.dataframe(df_cases, hide_index=True)
 
     else:
         st.info("Click 'Run Full Benchmark Suite' above to execute the automated evaluation.")

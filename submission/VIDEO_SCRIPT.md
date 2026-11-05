@@ -20,14 +20,14 @@ That postmortem was written, filed in Confluence, and forgotten.
 
 This is why I built **OPSRECALL**. Our tagline is simple: *Every incident should make the next one easier to solve.* 
 
-OPSRECALL decouples persistent operational memory from reasoning. It uses **Vectorize Hindsight** as an intelligent memory bank and **Groq** for high-speed, structured SRE reasoning."
+OPSRECALL decouples persistent operational memory from reasoning. It uses **Vectorize Hindsight** as an intelligent operational memory bank and **Groq** (`openai/gpt-oss-120b`) for high-speed, structured SRE reasoning."
 
 ---
 
 ### [00:35 - 01:25] Act 2: Telemetry Ingestion & Hindsight Architecture
 
 **[ON-SCREEN CUE]**:  
-*Click sidebar -> Navigate to **Architecture & About**. Display the system architecture diagram showing Streamlit -> Investigation Controller -> Hindsight Memory Bank & Groq LLM -> Evidence Layer -> Human Verification loop.*
+*Click sidebar -> Navigate to **Architecture & System Docs**. Display the system architecture diagram showing Streamlit -> Investigation Controller -> Hindsight Memory Bank & Groq LLM -> Evidence Layer -> Human Verification loop.*
 
 **SPEAKER**:  
 "Unlike traditional document search, OPSRECALL captures **change-aware operational memory**. 
@@ -37,7 +37,7 @@ Most incidents are triggered by state changes: a Helm chart update, a certificat
 OPSRECALL uses three core Hindsight operations:
 1. **`retain`**: Ingests verified incidents with stable document IDs, indexing telemetry, deployment changes, verified root causes, and crucially: *failed mitigation attempts*.
 2. **`recall`**: Uses Hindsight's multi-strategy TEMPR search to retrieve relevant historical experiences in milliseconds when new symptoms emerge.
-3. **`reflect`**: Synthesizes macro operational patterns across months of postmortems to detect recurring configuration drift before outages happen."
+3. **`reflect`**: Synthesizes macro operational patterns across historical postmortems to detect recurring configuration drift before outages happen."
 
 ---
 
@@ -53,7 +53,7 @@ Click the primary button: **`Run Side-by-Side Comparison`**.*
 
 We take `INC-001`: our checkout API has surged to 8500ms P99 latency and 504 timeouts following Helm deployment DEP-8492.
 
-Let's run the investigation through the exact same Groq `llama-3.3-70b` model: on the left, **without memory**; on the right, **with Hindsight memory**."
+Let's run the investigation through the exact same Groq reasoning engine: on the left, **without memory**; on the right, **with Hindsight memory**."
 
 **[ON-SCREEN CUE]**:  
 *Hover over the left column (Without Hindsight). Highlight the generic hypotheses and the bad recommendation.*
@@ -83,16 +83,16 @@ Having persistent operational memory turned a dangerous recommendation into an i
 
 **[ON-SCREEN CUE]**:  
 *Click sidebar -> Navigate to **Learning Center**. Show the verification form and historical postmortem records.  
-Then click **Evaluation Lab**. Show the benchmark bar chart comparing Memory OFF (66.7) vs Memory ON (100.0).*
+Then click **Evaluation Lab**. Show the benchmark summary comparing Memory OFF vs Memory ON across 12 scenarios and 7 evaluation dimensions.*
 
 **SPEAKER**:  
 "OPSRECALL enforces strict operational safety. It is an advisory tool—it never runs destructive commands. 
 
 In the **Learning Center**, engineers verify the actual root cause and successful mitigation before retaining new experience into Hindsight.
 
-In our **Evaluation Lab**, we run reproducible benchmarks across 6 test scenarios, including distractors. 
+In our **Evaluation Lab**, we run reproducible benchmarks across 12 test scenarios, including holdout edge cases and distractors. 
 
-On recurrent incidents, memory-enabled investigations score +40 points higher than baseline, specifically because they avoid historical failed fixes. And on novel distractor cases, Hindsight correctly avoids false recalls."
+On recurrent incidents, memory-enabled investigations score +25.0 points higher than baseline, specifically because they avoid historical failed fixes. And on novel distractor cases, Hindsight correctly avoids false recalls."
 
 ---
 
@@ -109,4 +109,3 @@ By coupling Vectorize Hindsight's persistent operational memory with fast LLM re
 The entire codebase, test suite, and evaluation reports are live on GitHub. Thank you!"
 
 **[FADE OUT]**
-

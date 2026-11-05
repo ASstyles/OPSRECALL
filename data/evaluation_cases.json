@@ -20,14 +20,7 @@
       "active_connections": 10
     },
     "recent_deployment": "DEP-9102 updated Helm values for checkout microservice including pool sizing and database timeout settings.",
-    "configuration_changes": "max_connections modified in deployment values yaml",
-    "ground_truth_root_cause": "Database connection pool misconfiguration / starvation (pool capped too low for incoming concurrency)",
-    "expected_historical_match": "INC-001",
-    "unsuccessful_mitigations_to_avoid": [
-      "Increasing client HTTP timeouts",
-      "Scaling pod replicas without fixing DB pool limits"
-    ],
-    "is_distractor": false
+    "configuration_changes": "max_connections modified in deployment values yaml"
   },
   {
     "case_id": "EVAL-002",
@@ -50,14 +43,7 @@
       "target_workers": 20
     },
     "recent_deployment": "DEP-9120 migrated autoscaler from custom cron to Kubernetes HPA v2.",
-    "configuration_changes": "HPA minReplicas and concurrency settings adjusted",
-    "ground_truth_root_cause": "Worker replica count and concurrency settings reduced, causing consumer starvation despite healthy individual message execution",
-    "expected_historical_match": "INC-002",
-    "unsuccessful_mitigations_to_avoid": [
-      "Purging dead-letter queue (DLQ)",
-      "Restarting RabbitMQ broker"
-    ],
-    "is_distractor": false
+    "configuration_changes": "HPA minReplicas and concurrency settings adjusted"
   },
   {
     "case_id": "EVAL-003",
@@ -79,14 +65,7 @@
       "cert_expiry_seconds_remaining": -180
     },
     "recent_deployment": "No code deployment in last 48 hours.",
-    "configuration_changes": "None",
-    "ground_truth_root_cause": "Expired downstream internal TLS certificate causing ingress SSL handshake failure",
-    "expected_historical_match": "INC-003",
-    "unsuccessful_mitigations_to_avoid": [
-      "Restarting payment gateway pods",
-      "Bypassing ingress SSL checks in production"
-    ],
-    "is_distractor": false
+    "configuration_changes": "None"
   },
   {
     "case_id": "EVAL-004",
@@ -109,14 +88,7 @@
       "concurrent_db_queries": 1100
     },
     "recent_deployment": "DEP-9180 updated cache TTL values across catalog domain to uniform 1 hour without jitter.",
-    "configuration_changes": "Cache key TTL set to exact 3600s",
-    "ground_truth_root_cause": "Cache stampede / dog-piling due to synchronized key expiration and lack of single-flight mutex lock",
-    "expected_historical_match": "INC-004",
-    "unsuccessful_mitigations_to_avoid": [
-      "Flushing the entire Redis cache",
-      "Provisioning a new DB read replica during the incident"
-    ],
-    "is_distractor": false
+    "configuration_changes": "Cache key TTL set to exact 3600s"
   },
   {
     "case_id": "EVAL-005",
@@ -126,7 +98,7 @@
     "symptoms": [
       "Checkout orchestrator pods experiencing repeated OOMKilled events",
       "Connection pool saturated with sockets held in ESTABLISHED state for >30s",
-      "Cascading slowdown across un-related frontend routes"
+      "Cascading slowdown across unrelated frontend routes"
     ],
     "error_logs": [
       "WARN  [http-client] Upstream partner payment API taking >28000ms to respond",
@@ -139,14 +111,7 @@
       "failed_orders_rate_pct": 86.0
     },
     "recent_deployment": "DEP-9210 upgraded external payment partner SDK with default 60s timeout.",
-    "configuration_changes": "Partner SDK timeout changed to 60s; circuit breaker disabled",
-    "ground_truth_root_cause": "Third-party payment gateway degradation causing cascading socket exhaustion and pod crashes due to missing circuit breaker and excessive timeouts",
-    "expected_historical_match": "INC-005",
-    "unsuccessful_mitigations_to_avoid": [
-      "Repeatedly restarting checkout pods without circuit breaking",
-      "Simply increasing pod memory limits"
-    ],
-    "is_distractor": false
+    "configuration_changes": "Partner SDK timeout changed to 60s; circuit breaker disabled"
   },
   {
     "case_id": "EVAL-006",
@@ -168,11 +133,140 @@
       "p99_latency_ms": 45
     },
     "recent_deployment": "DEP-9250 updated Terraform IAM policy for asset storage bucket.",
-    "configuration_changes": "S3 bucket policy IAM principal updated",
-    "ground_truth_root_cause": "S3 bucket IAM policy misconfiguration revoking CDN origin access",
-    "expected_historical_match": null,
-    "unsuccessful_mitigations_to_avoid": [],
-    "is_distractor": true
+    "configuration_changes": "S3 bucket policy IAM principal updated"
+  },
+  {
+    "case_id": "EVAL-007",
+    "case_title": "Checkout Latency Spike Caused by Database Lock Contention (Different Root Cause)",
+    "affected_service": "checkout-api",
+    "severity": "SEV-1",
+    "symptoms": [
+      "P99 latency surged to 8100ms on /checkout/pay",
+      "504 Gateway Timeouts across checkout routes",
+      "Active connections count is normal (140/150), but transactions are blocked waiting on table locks"
+    ],
+    "error_logs": [
+      "WARN  [postgres-monitor] Lock contention detected: query blocked for 28000ms waiting for AccessExclusiveLock on table 'orders'",
+      "ERROR [checkout-api] Query timed out waiting for table lock in checkout transaction"
+    ],
+    "metrics": {
+      "p99_latency_ms": 8100,
+      "db_pool_utilization_pct": 32.0,
+      "blocked_queries_count": 84,
+      "active_connections": 140
+    },
+    "recent_deployment": "DEP-9300 ran migration script adding unindexed column with exclusive table lock during peak traffic.",
+    "configuration_changes": "Schema migration DDL executed"
+  },
+  {
+    "case_id": "EVAL-008",
+    "case_title": "Authentication Service 500 Errors from CoreDNS Resolution Failures",
+    "affected_service": "auth-api",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Authentication endpoints returning 60% HTTP 500 errors",
+      "Redis session cache is completely healthy",
+      "PostgreSQL auth database CPU is low at 12%"
+    ],
+    "error_logs": [
+      "ERROR [auth-service] Dial tcp: lookup idp.internal.corp: i/o timeout (CoreDNS 10.96.0.10:53 no response)",
+      "CRIT  [auth-client] Unable to resolve Identity Provider hostname"
+    ],
+    "metrics": {
+      "auth_error_rate_pct": 62.4,
+      "dns_lookup_timeout_pct": 58.1,
+      "p99_latency_ms": 4200
+    },
+    "recent_deployment": "DEP-9320 rolled out CoreDNS autoscaler config in kube-system namespace.",
+    "configuration_changes": "CoreDNS configmap modified"
+  },
+  {
+    "case_id": "EVAL-009",
+    "case_title": "Inventory Processing Stalls from Silent VPC Packet Loss (Missing Deployment Context)",
+    "affected_service": "inventory-worker",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Inventory sync queue throughput collapsed by 92%",
+      "No software or configuration deployments in last 7 days",
+      "TCP connections to database experience random SYN retransmissions and 10s latency stalls"
+    ],
+    "error_logs": [
+      "WARN  [network] TCP retransmit rate spiked to 18% between worker subnets and DB subnet",
+      "ERROR [inventory.db] Read timed out after 10000ms waiting for packet sequence"
+    ],
+    "metrics": {
+      "tcp_retrans_pct": 18.2,
+      "worker_throughput_items_sec": 4,
+      "db_cpu_pct": 14.0
+    },
+    "recent_deployment": "None in last 7 days.",
+    "configuration_changes": "None"
+  },
+  {
+    "case_id": "EVAL-010",
+    "case_title": "Order Fulfillment Backlog from CPU-Bound Invoice PDF Generation (Conflicting Evidence)",
+    "affected_service": "order-fulfillment-worker",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Order backlog growing rapidly by 400 messages/minute",
+      "Worker replica count is at maximum (24 pods, 192 consumers)",
+      "Worker pod CPU utilization saturated at 99.8%"
+    ],
+    "error_logs": [
+      "WARN  [order-worker] CPU throttling active: container order-worker throttled 84% of CPU periods",
+      "INFO  [invoice-gen] Generating high-resolution vector PDF invoice took 3800ms per order"
+    ],
+    "metrics": {
+      "queue_depth": 18400,
+      "worker_cpu_pct": 99.8,
+      "active_workers": 24,
+      "avg_processing_time_ms": 3950
+    },
+    "recent_deployment": "DEP-9380 upgraded invoice generation library to new vector rendering engine.",
+    "configuration_changes": "New PDF rendering dependency introduced"
+  },
+  {
+    "case_id": "EVAL-011",
+    "case_title": "Product Catalog Slowdown on Memory-Constrained Nodes (Unsafe Historical Fix)",
+    "affected_service": "catalog-service",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Catalog query latency spiked to 4500ms on complex search routes",
+      "Kubernetes worker nodes are reporting NodeMemoryPressure (>96% memory used across node pool)",
+      "Database CPU is elevated at 74%"
+    ],
+    "error_logs": [
+      "WARN  [kubelet] Node worker-node-04 status: MemoryPressure=True",
+      "ERROR [catalog-api] Slow query on /search/filter: 4200ms duration, missing GIN index on attributes jsonb"
+    ],
+    "metrics": {
+      "node_memory_utilization_pct": 96.5,
+      "p99_latency_ms": 4500,
+      "db_cpu_pct": 74.0
+    },
+    "recent_deployment": "DEP-9410 added free-form jsonb attribute search endpoint.",
+    "configuration_changes": "Catalog filter query logic updated"
+  },
+  {
+    "case_id": "EVAL-012",
+    "case_title": "Streaming Event Pipeline Ingestion Freeze from Kafka Partition Rebalance Storm",
+    "affected_service": "event-streaming-pipeline",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Zero telemetry events processed for 12 consecutive minutes",
+      "Kafka consumer group status stuck in PreparingRebalance",
+      "Consumer pods alive but constantly dropping out of consumer group"
+    ],
+    "error_logs": [
+      "WARN  [kafka-consumer] CommitFailedException: Offset commit failed: Group rebalance in progress",
+      "ERROR [kafka-coordinator] Member event-worker-6b9c failed heartbeat: max.poll.interval.ms exceeded during batch processing"
+    ],
+    "metrics": {
+      "messages_ingested_per_sec": 0,
+      "consumer_lag": 142000,
+      "rebalance_count_last_10m": 18
+    },
+    "recent_deployment": "DEP-9450 increased consumer batch size from 500 to 10,000 without adjusting max.poll.interval.ms.",
+    "configuration_changes": "max.poll.records increased to 10000"
   }
 ]
-

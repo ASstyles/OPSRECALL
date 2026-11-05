@@ -36,10 +36,12 @@ class HindsightClientWrapper:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         bank_id: Optional[str] = None,
+        test_bank_id: Optional[str] = None,
     ):
         self.base_url = (base_url or settings.HINDSIGHT_BASE_URL).rstrip("/")
         self.api_key = api_key or settings.HINDSIGHT_API_KEY
         self.bank_id = bank_id or settings.HINDSIGHT_BANK_ID
+        self.test_bank_id = test_bank_id or settings.HINDSIGHT_TEST_BANK_ID
         self._client: Optional[Hindsight] = None
 
         if self.is_configured:
@@ -171,6 +173,43 @@ class HindsightClientWrapper:
         except Exception as e:
             logger.error(f"Error ensuring bank exists: {e}")
             raise
+
+    def wait_for_document_processing(
+        self,
+        document_id: str,
+        bank_id: Optional[str] = None,
+        timeout_seconds: float = 15.0,
+        poll_interval: float = 1.5,
+    ) -> bool:
+        """
+        Bounded polling for Hindsight asynchronous indexing.
+        Polls client.list_memories until memory units for the document appear or timeout.
+        """
+        import time
+
+        if not self.is_configured:
+            return False
+
+        target_bank = bank_id or self.bank_id
+        client = self.get_client()
+        start = time.time()
+
+        while time.time() - start < timeout_seconds:
+            try:
+                res = client.list_memories(
+                    bank_id=target_bank,
+                    document_id=document_id,
+                    limit=5,
+                )
+                total = getattr(res, "total", 0)
+                items = getattr(res, "items", [])
+                if total > 0 or len(items) > 0:
+                    return True
+            except Exception as e:
+                logger.debug(f"Polling list_memories error for {document_id}: {e}")
+            time.sleep(poll_interval)
+
+        return False
 
     def retain(
         self,

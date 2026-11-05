@@ -42,3 +42,26 @@ def test_confirm_and_retain_resolution():
     assert latest["incident_id"] == "INC-001"
     assert "Increasing timeouts" in latest["failed_approaches"]
 
+
+def test_confirm_resolution_validation_errors():
+    engine = LearningEngine()
+    with pytest.raises(ValueError, match="Incident ID cannot be empty"):
+        engine.confirm_and_retain_resolution(
+            incident_id="",
+            verified_root_cause="cause",
+            successful_resolution="fix",
+            failed_approaches=[],
+            verification_evidence="",
+            lessons_learned="",
+        )
+
+    with pytest.raises(ValueError, match="Verified root cause"):
+        engine.confirm_and_retain_resolution(
+            incident_id="INC-001",
+            verified_root_cause="",
+            successful_resolution="fix",
+            failed_approaches=[],
+            verification_evidence="",
+            lessons_learned="",
+        )
+

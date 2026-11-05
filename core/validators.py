@@ -42,7 +42,10 @@ class Incident(BaseModel):
 
 
 class EvaluationCase(BaseModel):
-    """Schema for reproducible evaluation scenarios."""
+    """
+    Model-facing incident telemetry for reproducible evaluation scenarios.
+    Strictly decoupled from evaluation ground-truth answer keys to guarantee zero leakage.
+    """
 
     case_id: str
     case_title: str
@@ -53,10 +56,22 @@ class EvaluationCase(BaseModel):
     metrics: Dict[str, Any] = Field(default_factory=dict)
     recent_deployment: Optional[str] = None
     configuration_changes: Optional[str] = None
+
+
+class EvaluationGroundTruth(BaseModel):
+    """
+    Evaluator-only ground-truth answer keys and rubric labels.
+    Never passed to the model or investigation engine.
+    """
+
+    case_id: str
+    scenario_type: str = Field(default="recurrent_incident")
     ground_truth_root_cause: str
     expected_historical_match: Optional[str] = None
     unsuccessful_mitigations_to_avoid: List[str] = Field(default_factory=list)
     is_distractor: bool = False
+    requires_uncertainty: bool = False
+    rubric_notes: str = ""
 
 
 class RecalledMemoryItem(BaseModel):
@@ -145,6 +160,7 @@ class CaseEvaluationScore(BaseModel):
     """Benchmark evaluation score for a single case and memory mode."""
 
     case_id: str
+    scenario_type: str = "recurrent_incident"
     memory_mode: Literal["MEMORY_ENABLED", "MEMORY_DISABLED"]
     top_3_root_cause_hit: bool
     retrieved_expected_historical: bool
@@ -152,6 +168,7 @@ class CaseEvaluationScore(BaseModel):
     avoided_unsuccessful_mitigations: bool
     false_recall_flagged: bool
     appropriate_uncertainty: bool
+    recommendation_grounding: bool = True
     overall_score: float = Field(..., ge=0.0, le=100.0)
     explanation: str
 

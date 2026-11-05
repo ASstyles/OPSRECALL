@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from core.validators import (
     Incident,
     EvaluationCase,
+    EvaluationGroundTruth,
     Hypothesis,
     ActionRecommendation,
     FailedApproachWarning,
@@ -49,12 +50,22 @@ def test_evaluation_case_creation():
         affected_service="auth-svc",
         severity="SEV-2",
         symptoms=["Login timeout"],
+    )
+    assert case.case_id == "EVAL-100"
+    assert case.affected_service == "auth-svc"
+
+
+def test_evaluation_ground_truth_creation():
+    gt = EvaluationGroundTruth(
+        case_id="EVAL-100",
+        scenario_type="recurrent_incident",
         ground_truth_root_cause="Redis memory exhaustion",
         unsuccessful_mitigations_to_avoid=["Restarting auth service"],
         is_distractor=False,
     )
-    assert case.case_id == "EVAL-100"
-    assert not case.is_distractor
+    assert gt.case_id == "EVAL-100"
+    assert not gt.is_distractor
+    assert "Redis" in gt.ground_truth_root_cause
 
 
 def test_hypothesis_model():

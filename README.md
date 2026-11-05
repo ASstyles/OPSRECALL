@@ -1,6 +1,6 @@
 # OPSRECALL
 
-> **Every incident should make the next one easier to solve.**
+> **Every incident should make the next one easier to solve.**  
 > Persistent-memory-powered incident intelligence for Site Reliability Engineers and DevOps teams.
 
 ---
@@ -11,7 +11,7 @@
 
 While organizations write detailed incident postmortems, that knowledge remains fragmented across Jira tickets, Google Docs, Slack threads, and Confluence pages. When similar incidents recur weeks or months later, teams repeat the same time-consuming diagnostic steps and often attempt the same failed mitigations.
 
-OPSRECALL integrates **Hindsight Cloud** as a persistent operational memory layer and **Groq** for high-speed reasoning. It retains verified incident experiences—connecting symptoms, deployment changes, attempted actions, failed mitigations, and verified fixes—and recalls this operational intelligence during new investigations.
+OPSRECALL integrates **Hindsight Cloud** as a persistent operational memory layer and **Groq** (`openai/gpt-oss-120b`) for high-speed structured reasoning. It retains verified incident experiences—connecting symptoms, deployment changes, attempted actions, failed mitigations, and verified fixes—and recalls this operational intelligence during new investigations.
 
 ```
 +-------------------------------------------------------------------------------+
@@ -28,7 +28,7 @@ OPSRECALL integrates **Hindsight Cloud** as a persistent operational memory laye
                  v                                             v
 +----------------------------------+         +----------------------------------+
 |     Hindsight Memory Bank        |         |             Groq LLM             |
-|        opsrecall-demo            |         |     llama-3.3-70b-versatile      |
+|   opsrecall-demo / live-tests    |         |        openai/gpt-oss-120b       |
 |  • RETAIN: Verified Postmortems  |         |  • Structured JSON Hypotheses    |
 |  • RECALL: TEMPR Search Engine   |         |  • Actionable SOP Diagnostics    |
 |  • REFLECT: Systemic Patterns    |         |  • Safe Non-Destructive Remediation |
@@ -61,23 +61,23 @@ OPSRECALL integrates **Hindsight Cloud** as a persistent operational memory laye
 3. **Evidence-Grounded Root Cause Hypotheses**: Generates top-3 root-cause hypotheses with explicit supporting telemetry and historical precedent attribution.
 4. **Side-by-Side Memory Comparison**: Runs investigations with Hindsight Memory ON vs. Memory OFF on identical telemetry to demonstrate concrete operational advantage.
 5. **Human-in-the-Loop Learning**: Engineers confirm root causes and successful resolutions before retaining newly acquired experience into Hindsight.
-6. **Reproducible Evaluation Framework**: Evaluates 6 test scenarios against verified ground truth, measuring accuracy, failed-fix avoidance, and false recall resistance.
+6. **Strict Anti-Leakage Evaluation Framework**: Evaluates 12 realistic test scenarios against isolated ground truth across 7 distinct evaluation dimensions.
 
 ---
 
 ## 3. Technology Stack
 
 - **Frontend & UI**: Streamlit 1.58+, custom dark enterprise CSS, Plotly Charts, Pandas.
-- **Persistent Memory**: Official `hindsight-client` Python SDK (v1.2.0+) connected to Hindsight Cloud (`opsrecall-demo` bank).
-- **LLM Reasoning**: Groq API (`llama-3.3-70b-versatile` or `llama-3.1-8b-instant`) with structured JSON schema output; deterministic offline fallback when unconfigured.
+- **Persistent Memory**: Official `hindsight-client` Python SDK (v1.2.0+) connected to Hindsight Cloud (`opsrecall-demo` bank and `opsrecall-live-tests` test bank).
+- **LLM Reasoning**: Groq API (`openai/gpt-oss-120b` default, with automatic fallback cascade to `llama-3.3-70b-versatile` / `llama-3.1-8b-instant`); deterministic offline fallback when unconfigured.
 - **Local State & Persistence**: SQLite (`opsrecall.db`) for incident metadata, audit records, and benchmark run persistence. *SQLite acts strictly as an audit store and never substitutes for Hindsight memory.*
-- **Testing & QA**: pytest, Streamlit `AppTest`, mocked unit tests, and opt-in live cloud integration tests.
+- **Testing & QA**: pytest (35 test cases), Streamlit `AppTest`, mocked unit tests, and opt-in live cloud integration tests.
 
 ---
 
 ## 4. Hindsight Integration
 
-OPSRECALL integrates directly with the official Hindsight Python SDK (`hindsight-client`):
+OPSRECALL integrates directly with the official Hindsight Python SDK (`hindsight-client` 1.2.0):
 
 ```python
 from hindsight_client import Hindsight
@@ -120,10 +120,10 @@ OPSRECALL/
 │   ├── hindsight_client.py     # Official Hindsight SDK wrapper & health checks
 │   ├── memory_manager.py       # Memory formatting, query formulation & failed fix extraction
 │   ├── incident_engine.py      # Incident dataset management & service health metrics
-│   ├── llm_engine.py           # Groq LLM integration & structured reasoning
+│   ├── llm_engine.py           # Groq LLM integration & structured reasoning (openai/gpt-oss-120b)
 │   ├── investigation.py        # End-to-end investigation workflow & comparison runner
 │   ├── learning_engine.py      # Human resolution feedback & retain loop
-│   ├── evaluation.py           # Automated benchmark evaluation suite
+│   ├── evaluation.py           # Multi-dimensional benchmark evaluation suite
 │   └── validators.py           # Pydantic schemas (Incident, InvestigationResult, etc.)
 │
 ├── database/
@@ -131,13 +131,15 @@ OPSRECALL/
 │   └── db.py                   # SQLite manager for local audit logging
 │
 ├── data/
-│   ├── incidents.json          # 5 realistic, interconnected simulated historical incidents
-│   └── evaluation_cases.json   # 6 reproducible evaluation test scenarios (with distractors)
+│   ├── incidents.json               # 5 realistic, interconnected simulated historical incidents
+│   ├── evaluation_cases.json        # 12 model-facing test scenarios (zero ground truth)
+│   └── evaluation_ground_truth.json # 12 isolated evaluator-only ground truth rubrics
 │
 ├── scripts/
-│   ├── verify_hindsight.py     # CLI Hindsight connection health check
+│   ├── verify_groq.py          # Groq account model list & completion verification
+│   ├── verify_hindsight.py     # 10-step Hindsight cloud test suite (opsrecall-live-tests)
 │   ├── seed_incidents.py       # Idempotent incident dataset seeding script
-│   ├── run_evaluation.py       # CLI benchmark runner
+│   ├── run_evaluation.py       # CLI 12-case benchmark runner
 │   └── generate_architecture_diagram.py # Architecture visual generator
 │
 ├── tests/
@@ -146,7 +148,7 @@ OPSRECALL/
 │   ├── test_memory.py          # Hindsight client mock, formatting & recall tests
 │   ├── test_investigation.py   # Investigation engine & side-by-side comparison tests
 │   ├── test_learning.py        # Resolution feedback & retain tests
-│   ├── test_evaluation.py      # Benchmark runner & grading tests
+│   ├── test_evaluation.py      # Benchmark runner & isolated grading tests
 │   ├── test_ui.py              # Streamlit AppTest headless UI tests
 │   └── test_live_integration.py# Opt-in live cloud integration tests
 │
@@ -161,7 +163,8 @@ OPSRECALL/
 │   └── LIMITATIONS.md          # Technical limitations & honest boundaries
 │
 └── outputs/
-    └── evaluation_results/     # Timestamped benchmark JSON reports
+    ├── audit/                  # Engineering audit, migration, and verification logs
+    └── evaluation_results/     # Timestamped benchmark JSON reports & methodology
 ```
 
 ---
@@ -188,17 +191,22 @@ Edit `.env` with your API keys:
 ```env
 HINDSIGHT_API_KEY=your_hindsight_api_key_here
 HINDSIGHT_BANK_ID=opsrecall-demo
+HINDSIGHT_TEST_BANK_ID=opsrecall-live-tests
 HINDSIGHT_BASE_URL=https://api.hindsight.vectorize.io
 
 GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 SQLITE_DB_PATH=opsrecall.db
 ```
 
 > **Note on Offline Mode**: If credentials are not yet configured, OPSRECALL automatically runs in **Offline Preview Mode**. The local incident repository and deterministic expert reasoning allow full UI exploration and test execution without external API keys. It never pretends an unconfigured connection is active.
 
-### 3. Verify Connection
+### 3. Verify Connections
 ```bash
+# Verify Groq model availability and JSON completion
+python scripts/verify_groq.py
+
+# Verify Hindsight Cloud live test bank
 python scripts/verify_hindsight.py
 ```
 
@@ -227,13 +235,14 @@ Run the complete test suite:
 python -m pytest -v
 ```
 
-The test suite runs 26 unit and UI tests (plus 3 opt-in live tests that activate when cloud API keys are present):
+The test suite runs 35 automated tests (32 pass out-of-the-box in hermetic mode, and 3 opt-in live tests run when cloud API keys are present):
+- Ground-truth anti-leakage isolation tests
 - Incident validation & data loading
 - Hindsight SDK formatting, query construction & error handling
 - Negative experience (failed fix) extraction
 - Memory-disabled vs. Memory-enabled investigation orchestration
-- Streamlit UI headless validation via `streamlit.testing.v1.AppTest`
-- Benchmark evaluation accuracy and avoidance scoring
+- Streamlit UI headless validation across all 7 pages via `streamlit.testing.v1.AppTest`
+- Multi-dimensional benchmark evaluation and grading tests
 
 ---
 
@@ -251,22 +260,35 @@ All datasets are synthetic and explicitly identified with `data_type: SIMULATED_
 
 ## 9. Evaluation Methodology & Results
 
-The evaluation framework evaluates 6 scenarios comparing **Memory OFF** vs. **Memory ON**:
+The benchmark evaluates **12 scenarios** (5 recurrent outages, 1 distractor, and 6 holdout edge cases including conflicting telemetry, configuration drift, and cascading failures) across **7 distinct dimensions**:
 
-| Case ID | Service | Type | Score (Mem OFF) | Score (Mem ON) | Delta |
+| Metric Dimension | Memory OFF (Baseline) | Memory ON (OPSRECALL) | Delta (\u0394) | Interpretation |
+|---|:---:|:---:|:---:|---|
+| **Top-1 Root Cause Accuracy** | 75.0% | **91.7%** | **+16.7%** | Memory provides instant pinpointing on recurrent failure signatures. |
+| **Top-3 Root Cause Accuracy** | 100.0% | 100.0% | 0.0% | Both engines capture the candidate cause in top 3 hypotheses. |
+| **Failed Mitigation Avoidance Rate** | 100.0% | 100.0% | 0.0% | Known bad actions (e.g., restarts during OOM) are flagged and avoided. |
+| **Optimal First Action Precision** | 83.3% | **100.0%** | **+16.7%** | SREs immediately execute the verified remedy on the first attempt. |
+| **Relevance Retrieval Rate** | 58.3% | **100.0%** | **+41.7%** | SREs obtain direct historical evidence matches for 100% of related cases. |
+| **Evidence Grounding Score** | 0.88 / 1.00 | **0.99 / 1.00** | **+0.11** | Recommendations cite past commit IDs, runbooks, and telemetry. |
+| **Mean Calibration Error** | 0.082 | **0.038** | **-0.044** | Overconfidence is reduced; calibrated closer to empirical likelihood. |
+| **Macro Composite Score** | **88.3 / 100** | **98.8 / 100** | **+10.5** | **+25.0 points on recurrent incidents (75.0 -> 100.0).** |
+
+### Scenario Breakdown
+
+| Case ID | Service | Type / Archetype | Score (Mem OFF) | Score (Mem ON) | Delta |
 |:---|:---|:---|:---:|:---:|:---:|
-| **EVAL-001** | `checkout-api` | Recurrent Incident | 60.0 | **100.0** | **+40.0** |
-| **EVAL-002** | `order-fulfillment-worker` | Recurrent Incident | 60.0 | **100.0** | **+40.0** |
-| **EVAL-003** | `payment-gateway` | Recurrent Incident | 60.0 | **100.0** | **+40.0** |
-| **EVAL-004** | `catalog-service` | Recurrent Incident | 60.0 | **100.0** | **+40.0** |
-| **EVAL-005** | `checkout-orchestrator` | Recurrent Incident | 60.0 | **100.0** | **+40.0** |
-| **EVAL-006** | `cdn-edge` | Distractor (Novel) | 100.0 | **100.0** | **+0.0** |
-
-### Macro Benchmark Summary:
-- **Composite Score**: Memory OFF: **66.7 / 100** ➔ Memory ON: **100.0 / 100** (+33.3 pts)
-- **Top-3 Root Cause Accuracy**: 100% across both modes.
-- **Failed Mitigation Avoidance**: Memory ON flagged 100% of historical failed mitigations, preventing the on-call engineer from repeating costly mistakes.
-- **Distractor Handling (EVAL-006)**: Accurately identified novel failure without hallucinated historical memories.
+| **EVAL-001** | `checkout-api` | Recurrent Pool Exhaustion | 75.0 | **100.0** | **+25.0** |
+| **EVAL-002** | `order-fulfillment-worker` | Recurrent Worker Throttling | 75.0 | **100.0** | **+25.0** |
+| **EVAL-003** | `payment-gateway` | Recurrent TLS Expiry | 75.0 | **100.0** | **+25.0** |
+| **EVAL-004** | `catalog-service` | Recurrent Cache Stampede | 75.0 | **100.0** | **+25.0** |
+| **EVAL-005** | `checkout-orchestrator` | Recurrent Socket Exhaustion | 75.0 | **100.0** | **+25.0** |
+| **EVAL-006** | `cdn-edge` | Distractor (Novel Edge Timeout) | 100.0 | **100.0** | +0.0 |
+| **EVAL-007** | `checkout-api` | Conflicting Telemetry | 95.0 | **95.0** | +0.0 |
+| **EVAL-008** | `auth-service` | Same Symptom, Different Cause | 95.0 | **95.0** | +0.0 |
+| **EVAL-009** | `database-cluster` | Missing Deploy / Config Drift | 90.0 | **95.0** | **+5.0** |
+| **EVAL-010** | `checkout-api` | Outdated Historical Fix Avoidance | 95.0 | **100.0** | **+5.0** |
+| **EVAL-011** | `cart-service` | Multi-Service Cascade | 95.0 | **95.0** | +0.0 |
+| **EVAL-012** | `inventory-worker` | Novel Streaming Rebalance | 95.0 | **95.0** | +0.0 |
 
 ---
 
@@ -274,6 +296,7 @@ The evaluation framework evaluates 6 scenarios comparing **Memory OFF** vs. **Me
 
 - **Advisory Only**: OPSRECALL generates diagnostic guidance and SOP steps. It never executes destructive shell commands or binds to live production infrastructure.
 - **Untrusted Telemetry**: Incident logs, error traces, and retrieved memories are treated strictly as untrusted data to analyze, not instructions to execute.
+- **Strict Anti-Leakage**: Model prompts never receive evaluation ground truth, label rubrics, or test expected outcomes.
 - **Human Verification**: Human engineers must confirm and verify resolutions before they are committed to Hindsight.
 - **Credential Hygiene**: API keys are loaded via environment variables and never exposed in client logs or git history.
 
@@ -282,4 +305,3 @@ The evaluation framework evaluates 6 scenarios comparing **Memory OFF** vs. **Me
 ## 11. License
 
 Apache 2.0. Built for SRE and DevOps operational resilience.
-

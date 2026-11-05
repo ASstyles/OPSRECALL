@@ -1,13 +1,12 @@
-Engineering teams spend hundreds of hours writing incident postmortems, yet every outage investigation starts from scratch.
+Engineering teams spend hundreds of hours writing postmortems, yet every outage investigation starts from scratch.
 
-I built OPSRECALL: an incident intelligence agent that gives SRE teams persistent operational memory using Hindsight Cloud and Groq.
+I built OPSRECALL: an incident intelligence agent giving SREs change-aware operational memory with Vectorize Hindsight Cloud and Groq.
 
-Instead of generic chatbot search, OPSRECALL captures change-aware memory: correlating deployment tweaks, symptoms, and verified fixes—while explicitly flagging past failed mitigations to stop on-call engineers from repeating past mistakes.
+Rather than generic search, OPSRECALL correlates deployments, symptoms, and verified fixes—explicitly warning on-call engineers against repeating past failed mitigations.
 
-In benchmark tests across recurrent outage scenarios, memory-enabled investigations outperformed memory-disabled baselines by +33.3 composite points, primarily by flagging previously failed fixes.
+Across 12 benchmark cases, memory boosted root cause accuracy by +16.7% and improved recurrent outage resolution scores by +25.0 points (75.0 -> 100.0).
 
-Check out the architecture, code, and evaluation suite:
+Inspect the architecture, test suite, and evaluation data:
 https://github.com/your-username/OPSRECALL
 
-#DevOps #SRE #AIOps #IncidentManagement #SoftwareEngineering
-
+#DevOps #SRE #AIOps #IncidentManagement

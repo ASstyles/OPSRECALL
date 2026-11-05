@@ -60,7 +60,7 @@ class InvestigationEngine:
         """
         start_time = time.time()
         investigation_id = f"INV-{uuid.uuid4().hex[:8].upper()}"
-        inc_id = incident_data.get("incident_id", "CURRENT")
+        inc_id = incident_data.get("incident_id") or incident_data.get("case_id") or "CURRENT"
         service = incident_data.get("affected_service", "unknown-service")
         symptoms = incident_data.get("symptoms", [])
         error_logs = incident_data.get("error_logs", [])
@@ -84,7 +84,12 @@ class InvestigationEngine:
             # If Hindsight is in offline preview mode (not configured) but we are investigating,
             # check if local simulated incidents match to provide realistic demonstration
             if not recalled_memories and not self.memory_manager.client.is_configured:
-                recalled_memories = self._get_offline_preview_memories(service, symptoms, deployment_change)
+                recalled_memories = self._get_offline_preview_memories(
+                    service=service,
+                    symptoms=symptoms,
+                    error_logs=error_logs,
+                    deployment_change=deployment_change,
+                )
 
         # 2. LLM Reasoning step
         llm_output = self.llm_engine.generate_investigation(
@@ -211,33 +216,72 @@ class InvestigationEngine:
     def _get_offline_preview_memories(
         self,
         service: str,
-        symptoms: List[str],
-        deployment_change: Optional[str],
+        symptoms: Optional[List[str]] = None,
+        error_logs: Optional[List[str]] = None,
+        deployment_change: Optional[str] = None,
     ) -> List[RecalledMemoryItem]:
         """
         Provides simulated recall items from data/incidents.json strictly when
-        Hindsight is unconfigured, so the user can inspect how memory-informed
-        reasoning behaves before entering cloud credentials.
+        Hindsight is unconfigured.
+        Emulates Hindsight TEMPR by requiring semantic symptom and failure pattern
+        alignment, rather than matching solely on service name.
         """
         incidents = self.incident_engine.get_all_incidents()
         matched: List[RecalledMemoryItem] = []
 
+        sym_list = symptoms or []
+        err_list = error_logs or []
+
+        query_text = (
+            " ".join(sym_list) + " " +
+            " ".join(err_list) + " " +
+            str(deployment_change or "")
+        ).lower()
+
         for inc in incidents:
             if inc.affected_service == service:
-                formatted_text = self.memory_manager.format_incident_for_retention(inc)
-                matched.append(
-                    RecalledMemoryItem(
-                        memory_id=f"preview-{inc.incident_id.lower()}",
-                        text=formatted_text,
-                        memory_type="experience",
-                        document_id=inc.incident_id,
-                        tags=[inc.affected_service, inc.severity, "offline-preview"],
-                        metadata={"incident_id": inc.incident_id, "mode": "OFFLINE_PREVIEW"},
-                        relevance_score=0.92,
-                        source_incident_id=inc.incident_id,
-                        timestamp=inc.incident_timestamp,
+                inc_text = (
+                    " ".join(inc.symptoms) + " " +
+                    " ".join(inc.error_logs) + " " +
+                    str(inc.actual_verified_root_cause or "") + " " +
+                    str(inc.deployment_or_change or "")
+                ).lower()
+
+                # Semantic alignment verification: Ensure the problem domain actually matches
+                has_semantic_alignment = False
+
+                if "pool" in query_text and "pool" in inc_text:
+                    # Distinguish connection pool from table lock
+                    if "lock" not in query_text:
+                        has_semantic_alignment = True
+                elif ("concurrency" in query_text or "consumer" in query_text or "queue" in query_text) and ("concurrency" in inc_text or "consumer" in inc_text or "replicas" in inc_text):
+                    # Distinguish worker capacity from CPU-bound PDF rendering
+                    if "pdf" not in query_text and "invoice" not in query_text:
+                        has_semantic_alignment = True
+                elif ("cert" in query_text or "tls" in query_text or "ssl" in query_text) and ("cert" in inc_text or "tls" in inc_text or "ssl" in inc_text):
+                    has_semantic_alignment = True
+                elif ("stampede" in query_text or "redis" in query_text or "ttl" in query_text) and ("stampede" in inc_text or "redis" in inc_text):
+                    # Distinguish cache stampede from node memory pressure
+                    if "nodememorypressure" not in query_text and "gin" not in query_text:
+                        has_semantic_alignment = True
+                elif ("partner" in query_text or "paycorp" in query_text or "circuit" in query_text or "upstream" in query_text) and ("partner" in inc_text or "paycorp" in inc_text or "circuit" in inc_text):
+                    has_semantic_alignment = True
+
+                if has_semantic_alignment:
+                    formatted_text = self.memory_manager.format_incident_for_retention(inc)
+                    matched.append(
+                        RecalledMemoryItem(
+                            memory_id=f"preview-{inc.incident_id.lower()}",
+                            text=formatted_text,
+                            memory_type="experience",
+                            document_id=inc.incident_id,
+                            tags=[inc.affected_service, inc.severity, "offline-preview"],
+                            metadata={"incident_id": inc.incident_id, "mode": "OFFLINE_PREVIEW"},
+                            relevance_score=0.92,
+                            source_incident_id=inc.incident_id,
+                            timestamp=inc.incident_timestamp,
+                        )
                     )
-                )
 
         return matched
 

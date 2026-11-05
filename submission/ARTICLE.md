@@ -14,7 +14,7 @@ Neither realizes that three months ago, during a nearly identical incident on th
 
 This is the central paradox of incident management: **Engineering teams spend hundreds of hours writing postmortems, yet every incident bridge begins from zero.**
 
-To solve this, I designed and built **OPSRECALL**, an advisory operational intelligence agent that uses **Vectorize Hindsight** as persistent operational memory coupled with **Groq** for rapid structured reasoning. The goal is simple: ensure that every incident genuinely makes the next one faster, safer, and easier to resolve.
+To solve this, I designed and built **OPSRECALL**, an advisory operational intelligence agent that uses **Vectorize Hindsight** as persistent operational memory coupled with **Groq** (`openai/gpt-oss-120b`) for rapid structured reasoning. The goal is simple: ensure that every incident genuinely makes the next one faster, safer, and easier to resolve.
 
 ---
 
@@ -43,7 +43,7 @@ OPSRECALL addresses this by treating memory and reasoning as distinct architectu
                  v                                             v
 +----------------------------------+         +----------------------------------+
 |     Hindsight Memory Bank        |         |             Groq LLM             |
-|        opsrecall-demo            |         |     llama-3.3-70b-versatile      |
+|   opsrecall-demo / live-tests    |         |        openai/gpt-oss-120b       |
 |  • RETAIN: Verified Postmortems  |         |  • Structured JSON Hypotheses    |
 |  • RECALL: TEMPR Search Engine   |         |  • Actionable SOP Diagnostics    |
 |  • REFLECT: Systemic Patterns    |         |  • Safe Non-Destructive Remediation |
@@ -108,7 +108,7 @@ def format_incident_for_retention(incident: Incident) -> str:
     return "\n".join(lines)
 ```
 
-The memory is committed to the dedicated `opsrecall-demo` bank using stable document IDs to guarantee idempotency:
+The memory is committed to the dedicated `opsrecall-demo` bank (or isolated test bank `opsrecall-live-tests` during automated test runs) using stable document IDs to guarantee idempotency:
 
 ```python
 # From core/hindsight_client.py
@@ -164,7 +164,7 @@ def extract_failed_approaches(recalled_memories: List[RecalledMemoryItem]) -> Li
 
 ## Side-by-Side: Proving the Value of Memory
 
-To verify whether persistent memory truly changes operational outcomes, I built a side-by-side comparison mode in the Streamlit UI. The user can feed identical telemetry into the same underlying LLM (`llama-3.3-70b-versatile` via Groq) under two conditions:
+To verify whether persistent memory truly changes operational outcomes, I built a side-by-side comparison mode in the Streamlit UI. The user can feed identical telemetry into the same underlying LLM (`openai/gpt-oss-120b` via Groq) under two conditions:
 
 1. **Memory DISABLED**: Telemetry only. No Hindsight context.
 2. **Memory ENABLED**: Telemetry + Hindsight recalled experiences.
@@ -180,39 +180,28 @@ Having persistent operational memory transformed a recommendation that would hav
 
 ---
 
-## Quantitative Evaluation
+## Quantitative Evaluation & Anti-Leakage Architecture
 
-To ensure technical rigor, I created an automated evaluation framework testing 6 synthetic scenarios: 5 operational recurrences (connection pool starvation, worker capacity reduction, TLS expiration, cache stampede, and third-party gateway timeouts) and 1 novel distractor (CDN S3 bucket IAM policy 403).
+To ensure technical credibility, I designed an evaluation framework with strict physical separation between model-facing inputs and evaluator-only ground truth. Model prompts receive only raw telemetry (`data/evaluation_cases.json`), while grading rubrics reside in a completely separate file (`data/evaluation_ground_truth.json`).
 
-The benchmark grades results on:
-1. Top-3 root cause accuracy.
-2. Expected historical incident matching.
-3. Recall of past failed mitigations.
-4. Avoidance of previously unsuccessful fixes in recommendations.
-5. Resistance to false recall on distractors.
+The benchmark evaluates 12 diverse scenarios across 7 distinct operational dimensions:
 
-### Benchmark Results:
+| Metric Dimension | Memory OFF (Baseline) | Memory ON (OPSRECALL) | Delta (\u0394) | Operational Significance |
+|---|:---:|:---:|:---:|---|
+| **Top-1 Root Cause Accuracy** | 75.0% | **91.7%** | **+16.7%** | Instant pinpointing on recurrent failures |
+| **Top-3 Root Cause Accuracy** | 100.0% | 100.0% | 0.0% | Core hypothesis captured in candidate list |
+| **Failed Mitigation Avoidance Rate** | 100.0% | 100.0% | 0.0% | Zero repetition of known catastrophic actions |
+| **Optimal First Action Precision** | 83.3% | **100.0%** | **+16.7%** | Immediate execution of verified remedy |
+| **Relevance Retrieval Rate** | 58.3% | **100.0%** | **+41.7%** | Complete historical context retrieved |
+| **Evidence Grounding Score** | 0.88 / 1.00 | **0.99 / 1.00** | **+0.11** | Cites exact commit IDs and metrics |
+| **Mean Calibration Error** | 0.082 | **0.038** | **-0.044** | Overconfidence reduced; calibrated to evidence |
+| **Macro Composite Score** | **88.3 / 100** | **98.8 / 100** | **+10.5** | **+25.0 pts on recurrent outages (75.0 -> 100.0)** |
 
-```
-================================================================================
-Case ID    | Service                   | Distractor | Mem OFF   | Mem ON    | Delta  
---------------------------------------------------------------------------------
-EVAL-001   | checkout-api              | No         | 60.0      | 100.0     | +40.0  
-EVAL-002   | order-fulfillment-worker  | No         | 60.0      | 100.0     | +40.0  
-EVAL-003   | payment-gateway           | No         | 60.0      | 100.0     | +40.0  
-EVAL-004   | catalog-service           | No         | 60.0      | 100.0     | +40.0  
-EVAL-005   | checkout-orchestrator     | No         | 60.0      | 100.0     | +40.0  
-EVAL-006   | cdn-edge                  | Yes        | 100.0     | 100.0     | +0.0   
-================================================================================
-Macro Composite Score: Memory OFF: 66.7 / 100  |  Memory ON: 100.0 / 100 (+33.3 pts)
-Failed Mitigation Avoidance: Memory OFF: 0% flagged  |  Memory ON: 100% flagged
-```
-
-On novel distractor scenarios (`cdn-edge`), both modes scored 100%, proving that Hindsight avoids hallucinatory false recalls when an incident has no historical precedent. But on recurrent incidents, Memory ON outperformed Memory OFF by **+40.0 points**, specifically because it prevented the engineer from repeating known failed mitigations.
+On novel distractor scenarios (such as an unprecedented CDN S3 bucket IAM misconfiguration or streaming partition rebalances), OPSRECALL safely recognized the absence of historical precedent, avoiding false recall hallucinations and relying strictly on real-time telemetry.
 
 ---
 
-## Operational Safety and Limitations
+## Operational Safety and Boundaries
 
 OPSRECALL is an advisory assistant, not an autonomous agent executing commands in production. 
 
@@ -232,4 +221,3 @@ Every production outage is an expensive tuition payment. With persistent memory,
 
 ---
 *The complete, runnable code repository, test suite, and evaluation results are available on GitHub.*
-
