@@ -129,8 +129,13 @@ class Settings:
 
     @property
     def HINDSIGHT_BASE_URL(self) -> str:
-        url = os.getenv("HINDSIGHT_BASE_URL", "").strip()
+        url = os.getenv("HINDSIGHT_API_URL", "").strip() or os.getenv("HINDSIGHT_BASE_URL", "").strip()
         return url if url else "https://api.hindsight.vectorize.io"
+
+    @property
+    def HINDSIGHT_API_URL(self) -> str:
+        """Alias for HINDSIGHT_BASE_URL."""
+        return self.HINDSIGHT_BASE_URL
 
     # Groq LLM Configuration
     @property

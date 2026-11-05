@@ -39,8 +39,10 @@ This document provides a candid, technically honest assessment of current limita
 
 ---
 
-## 6. Known Incomplete Functionality / Future Roadmap
+## 7. BAND AI Desktop Competition Requirements & Execution Boundaries
 
-- **Autonomous GitOps Ingestion**: Automatically scraping closed GitHub Pull Requests and merged Helm commits to ingest deployment changes without manual input.
-- **Automated Postmortem Parsing**: Ingesting unstructured Markdown or PDF postmortems directly from Jira or Confluence via webhook.
-- **Continuous Background Reflection**: Scheduling recurring cron jobs using Hindsight's `reflect` API to automatically email weekly systemic fragility digests to SRE leads.
+- **Execution Model**: OPSRECALL is architected as a local Python-based application paired with a local Streamlit web application interface running on `http://localhost:8501`. In the BAND AI Desktop evaluation environment, the application executes locally via `python -m streamlit run app.py` on the Windows desktop host and renders directly within any local web browser or embedded desktop webview.
+- **Port & Firewall Configuration**: Streamlit binds to local loopback (`127.0.0.1:8501`). No external ingress, inbound NAT, or public ports are required.
+- **Desktop Runtime Dependencies**: Requires Python 3.10+ (tested on Python 3.14.3 Windows x64), SQLite 3 (standard library), and the dependencies listed in `requirements.txt`.
+- **Offline / Isolated Execution Support**: In fully air-gapped or network-restricted desktop evaluation environments without internet access to external APIs (Hindsight Cloud or Groq Cloud), OPSRECALL's deterministic offline fallback engine activates automatically. All 7 dashboard views, incident comparisons, learning loops, and benchmark evaluations execute hermetically with zero external network calls.
+- **Live Cloud Connectivity**: If outbound HTTPS (port 443) to `api.hindsight.vectorize.io` and `api.groq.com` is permitted in the desktop environment, supplying valid keys in `.env` activates real-time neural recall and LLM reasoning.

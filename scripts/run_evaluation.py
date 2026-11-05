@@ -19,7 +19,7 @@ from core.evaluation import get_evaluation_framework
 
 def main() -> int:
     print("================================================================================")
-    print("OPSRECALL — OPERATIONAL INCIDENT BENCHMARK EVALUATION")
+    print("OPSRECALL -- OPERATIONAL INCIDENT BENCHMARK EVALUATION")
     print("================================================================================")
     print("Evaluating Top-3 Root Cause Accuracy, Failed Mitigation Avoidance, and Provenance...")
     print("--------------------------------------------------------------------------------")

@@ -59,18 +59,22 @@ def main() -> int:
             selected_model = target_model
         else:
             print(f"   -> [WARN] Configured model '{target_model}' not found in account model list.")
-            # Check recommended alternatives
-            candidates = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+            # Check recommended non-deprecated alternatives
+            deprecated_tokens = ["llama-3.3-70b-versatile", "qwen/qwen3.6-27b"]
+            valid_candidates = [
+                m for m in available_model_ids
+                if not any(dep in m for dep in deprecated_tokens)
+            ]
             selected_model = None
-            for c in candidates:
-                if c in available_model_ids:
+            for c in ["openai/gpt-oss-120b", "llama-3.1-8b-instant"]:
+                if c in valid_candidates:
                     selected_model = c
-                    print(f"   -> Automatically selected fallback candidate: '{selected_model}'")
+                    print(f"   -> Automatically selected active candidate: '{selected_model}'")
                     break
 
-            if not selected_model:
-                selected_model = available_model_ids[0]
-                print(f"   -> Falling back to first available model: '{selected_model}'")
+            if not selected_model and valid_candidates:
+                selected_model = valid_candidates[0]
+                print(f"   -> Falling back to first non-deprecated model: '{selected_model}'")
 
         # 2. Run Smoke Test with JSON Mode
         print(f"\n2. Testing Structured JSON Chat Completion with '{selected_model}'...")

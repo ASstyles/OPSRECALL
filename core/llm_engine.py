@@ -222,57 +222,74 @@ class LLMEngine:
         }
         return {k: v for k, v in data.items() if k not in prohibited_keys}
 
+    def get_verified_account_model(self) -> str:
+        """Dynamically query Groq account models endpoint to resolve an active, non-deprecated model."""
+        client = self.get_client()
+        if not client:
+            return self.model
+
+        try:
+            models_page = client.models.list()
+            available = [m.id for m in models_page.data]
+            if self.model in available:
+                return self.model
+
+            # Exclude known deprecated models
+            deprecated_tokens = ["llama-3.3-70b-versatile", "qwen/qwen3.6-27b"]
+            valid_candidates = [
+                m for m in available
+                if not any(dep in m for dep in deprecated_tokens)
+            ]
+
+            # Priority preference among active models supporting JSON mode
+            for preferred in ["openai/gpt-oss-120b", "llama-3.1-8b-instant"]:
+                if preferred in valid_candidates:
+                    logger.info(f"Dynamically selected active model '{preferred}' from account model list.")
+                    return preferred
+
+            if valid_candidates:
+                return valid_candidates[0]
+
+        except Exception as e:
+            logger.warning(f"Could not dynamically query account models endpoint: {e}")
+
+        return self.model
+
     def _call_groq(
         self,
         incident_data: Dict[str, Any],
         recalled_memories: List[RecalledMemoryItem],
         memory_mode: str,
     ) -> Dict[str, Any]:
-        """Invoke Groq API with structured JSON output and verified fallback chain."""
+        """Invoke Groq API with structured JSON output and dynamically verified model."""
         user_prompt = self._build_investigation_prompt(incident_data, recalled_memories, memory_mode)
 
-        # Fallback chain for model availability
-        candidate_models = [self.model]
-        for fallback in ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
-            if fallback not in candidate_models:
-                candidate_models.append(fallback)
+        # Dynamically resolve active model from account endpoint
+        active_model = self.get_verified_account_model()
 
-        last_error = None
-        for candidate in candidate_models:
-            try:
-                response = self._groq_client.chat.completions.create(
-                    model=candidate,
-                    messages=[
-                        {"role": "system", "content": INVESTIGATION_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.1,
-                )
+        try:
+            response = self._groq_client.chat.completions.create(
+                model=active_model,
+                messages=[
+                    {"role": "system", "content": INVESTIGATION_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
 
-                raw_content = response.choices[0].message.content
-                parsed = self._clean_and_parse_json(raw_content)
-                parsed["llm_model"] = f"groq:{candidate}"
-                return parsed
+            raw_content = response.choices[0].message.content
+            parsed = self._clean_and_parse_json(raw_content)
+            parsed["llm_model"] = f"groq:{active_model}"
+            return parsed
 
-            except Exception as e:
-                err_msg = str(e).lower()
-                last_error = e
-                # If model not found or deprecated, try next in candidate chain
-                if any(term in err_msg for term in ["model_not_found", "does not exist", "deprecated", "not found", "decommissioned"]):
-                    logger.warning(f"Groq model '{candidate}' unavailable ({e}). Attempting next candidate in chain.")
-                    continue
-                elif "authentication" in err_msg or "unauthorized" in err_msg or "401" in err_msg:
-                    # Authentication failure: do not silently swallow
-                    logger.error(f"Groq authentication rejected: {e}")
-                    raise RuntimeError(f"Groq API authentication failed (401 Unauthorized): {e}")
-                else:
-                    logger.error(f"Groq invocation failed on '{candidate}': {e}")
-                    break
-
-        # If all candidates failed in live mode, raise error or return explicit failure
-        logger.error(f"All Groq candidates failed in live mode. Last error: {last_error}")
-        raise RuntimeError(f"Live Groq invocation failed across all candidates [{', '.join(candidate_models)}]: {last_error}")
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "authentication" in err_msg or "unauthorized" in err_msg or "401" in err_msg:
+                logger.error(f"Groq authentication rejected: {e}")
+                raise RuntimeError(f"Groq API authentication failed (401 Unauthorized): {e}")
+            logger.error(f"Live Groq invocation failed on '{active_model}': {e}")
+            raise RuntimeError(f"Live Groq invocation failed on '{active_model}': {e}")
 
     def _build_investigation_prompt(
         self,

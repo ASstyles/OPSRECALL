@@ -1,0 +1,554 @@
+{
+  "run_id": "RUN-20261105-172404",
+  "run_timestamp": "2026-11-05T17:24:04.360496+00:00",
+  "cases_evaluated": 12,
+  "model_configured": "openai/gpt-oss-120b",
+  "hindsight_bank": "opsrecall-demo",
+  "hindsight_status": "OFFLINE_PREVIEW",
+  "metrics": {
+    "top_3_root_cause_accuracy": {
+      "memory_enabled": 100.0,
+      "memory_disabled": 100.0
+    },
+    "relevant_memory_retrieval_rate": {
+      "memory_enabled": 100.0,
+      "memory_disabled": 58.3
+    },
+    "failed_mitigation_avoidance_rate": {
+      "memory_enabled": 100.0,
+      "memory_disabled": 100.0
+    },
+    "false_historical_recall_rate": {
+      "memory_enabled": 0.0,
+      "memory_disabled": 0.0
+    },
+    "recommendation_grounding_rate": {
+      "memory_enabled": 100.0,
+      "memory_disabled": 100.0
+    },
+    "appropriate_uncertainty_rate": {
+      "memory_enabled": 100.0,
+      "memory_disabled": 100.0
+    },
+    "composite_score": {
+      "memory_enabled": 98.8,
+      "memory_disabled": 88.3
+    }
+  },
+  "cases": [
+    {
+      "case_id": "EVAL-001",
+      "case_title": "Checkout Latency Surge After Helm Chart Parameter Tweak",
+      "service": "checkout-api",
+      "scenario_type": "recurrent_incident",
+      "is_distractor": false,
+      "disabled": {
+        "score": 75.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Database slow query degradation or missing index on checkout table.",
+          "Insufficient API container pod replicas under increased load."
+        ],
+        "recommended_remediation": [
+          "Scale checkout-api pods horizontally or increase request timeout thresholds."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Database connection pool starvation caused by deployment configuration capping pool size below concurrency requirements.",
+          "PostgreSQL database query latency or lock contention."
+        ],
+        "recommended_remediation": [
+          "Restore max_db_connections configuration in Helm chart to 150 and roll out revision."
+        ],
+        "failed_approaches_warned": 3,
+        "historical_refs": [
+          "INC-001"
+        ],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-002",
+      "case_title": "Rapid Fulfillment Queue Buildup After Autoscaler Migration",
+      "service": "order-fulfillment-worker",
+      "scenario_type": "recurrent_incident",
+      "is_distractor": false,
+      "disabled": {
+        "score": 75.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Poison pill message or malformed payload blocking queue consumption.",
+          "RabbitMQ broker bottleneck or broker resource starvation."
+        ],
+        "recommended_remediation": [
+          "Purge dead-letter queue and restart RabbitMQ broker cluster."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Worker concurrency and replica capacity misconfiguration following autoscaler migration.",
+          "Poison pill message blocking consumer worker loop."
+        ],
+        "recommended_remediation": [
+          "Scale order-fulfillment-worker replicas to 12 and restore concurrency=8."
+        ],
+        "failed_approaches_warned": 3,
+        "historical_refs": [
+          "INC-002"
+        ],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-003",
+      "case_title": "Immediate 502 Bad Gateway Errors on Internal Payment Endpoint",
+      "service": "payment-gateway",
+      "scenario_type": "recurrent_incident",
+      "is_distractor": false,
+      "disabled": {
+        "score": 75.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Payment vault upstream service crash or network unreachable.",
+          "TLS certificate expiration or cipher mismatch."
+        ],
+        "recommended_remediation": [
+          "Restart payment-gateway and vault pods to clear stale sockets."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Downstream internal TLS certificate expired on payment vault endpoint.",
+          "Payment vault service crash or container OOMKill."
+        ],
+        "recommended_remediation": [
+          "Rotate and reissue TLS certificate for internal-payment-vault via Vault CLI."
+        ],
+        "failed_approaches_warned": 6,
+        "historical_refs": [
+          "INC-003"
+        ],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-004",
+      "case_title": "Severe Database Load Following Scheduled Cache Expiry",
+      "service": "catalog-service",
+      "scenario_type": "recurrent_incident",
+      "is_distractor": false,
+      "disabled": {
+        "score": 75.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Redis cache failure or corrupted cache entries requiring flush.",
+          "Missing database index on products table causing query timeouts."
+        ],
+        "recommended_remediation": [
+          "Flush Redis cache and add a read-replica database."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Cache stampede (dog-piling) on hot featured product keys due to synchronized TTL expiration.",
+          "Sudden web crawler spike or malicious traffic volume."
+        ],
+        "recommended_remediation": [
+          "Enable single-flight distributed mutex lock on cache misses and introduce +/- 15% TTL jitter."
+        ],
+        "failed_approaches_warned": 3,
+        "historical_refs": [
+          "INC-004"
+        ],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-005",
+      "case_title": "Thread Exhaustion and Pod OOM Crashes from Third-Party API Latency",
+      "service": "checkout-orchestrator",
+      "scenario_type": "recurrent_incident",
+      "is_distractor": false,
+      "disabled": {
+        "score": 75.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Application memory leak in checkout-orchestrator pods.",
+          "External payment partner degradation or network timeout."
+        ],
+        "recommended_remediation": [
+          "Increase pod memory limit from 2Gi to 4Gi and restart pods."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Third-party payment partner latency causing cascading thread and socket exhaustion due to missing circuit breaker.",
+          "Internal memory leak in checkout orchestrator application runtime."
+        ],
+        "recommended_remediation": [
+          "Activate emergency circuit breaker fallback to secondary payment provider (Stripe rail) and set 3s timeout."
+        ],
+        "failed_approaches_warned": 5,
+        "historical_refs": [
+          "INC-005"
+        ],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-006",
+      "case_title": "Static Assets Returning HTTP 403 on CDN Edge (Novel Incident)",
+      "service": "cdn-edge",
+      "scenario_type": "novel_distractor",
+      "is_distractor": true,
+      "disabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "S3 bucket IAM policy or ACL misconfiguration revoking CDN origin access.",
+          "Cloudflare / CDN SSL or host header configuration mismatch."
+        ],
+        "recommended_remediation": [
+          "Revert Terraform IAM policy changes to restore s3:GetObject permission for CDN origin principal."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "S3 bucket IAM policy or ACL misconfiguration revoking CDN origin access.",
+          "Cloudflare / CDN SSL or host header configuration mismatch."
+        ],
+        "recommended_remediation": [
+          "Revert Terraform IAM policy changes to restore s3:GetObject permission for CDN origin principal."
+        ],
+        "failed_approaches_warned": 0,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-007",
+      "case_title": "Checkout Latency Spike Caused by Database Lock Contention (Different Root Cause)",
+      "service": "checkout-api",
+      "scenario_type": "different_underlying_cause",
+      "is_distractor": false,
+      "disabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Long-running exclusive table lock and lock contention during online DDL migration, NOT connection pool exhaustion.",
+          "Database connection pool starvation or thread exhaustion."
+        ],
+        "recommended_remediation": [
+          "Identify and terminate blocking DDL migration PID via pg_cancel_backend() or pg_terminate_backend()."
+        ],
+        "failed_approaches_warned": 1,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Long-running exclusive table lock and lock contention during online DDL migration, NOT connection pool exhaustion.",
+          "Database connection pool starvation or thread exhaustion."
+        ],
+        "recommended_remediation": [
+          "Identify and terminate blocking DDL migration PID via pg_cancel_backend() or pg_terminate_backend()."
+        ],
+        "failed_approaches_warned": 1,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-008",
+      "case_title": "Authentication Service 500 Errors from CoreDNS Resolution Failures",
+      "service": "auth-api",
+      "scenario_type": "unrelated_service_failure",
+      "is_distractor": false,
+      "disabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "CoreDNS cluster resolution degradation causing lookup timeouts on Identity Provider hostname.",
+          "External Identity Provider downtime or TLS handshake rejection."
+        ],
+        "recommended_remediation": [
+          "Rollback CoreDNS autoscaler configmap and restart coredns pods in kube-system namespace."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "CoreDNS cluster resolution degradation causing lookup timeouts on Identity Provider hostname.",
+          "External Identity Provider downtime or TLS handshake rejection."
+        ],
+        "recommended_remediation": [
+          "Rollback CoreDNS autoscaler configmap and restart coredns pods in kube-system namespace."
+        ],
+        "failed_approaches_warned": 0,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-009",
+      "case_title": "Inventory Processing Stalls from Silent VPC Packet Loss (Missing Deployment Context)",
+      "service": "inventory-worker",
+      "scenario_type": "missing_deployment_info",
+      "is_distractor": false,
+      "disabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "VPC network interface MTU mismatch or packet loss between worker subnet and database subnet.",
+          "Database instance resource exhaustion or disk IOPS throttling."
+        ],
+        "recommended_remediation": [
+          "Inspect AWS VPC flow logs and verify MTU path settings between worker subnet and DB subnet."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "VPC network interface MTU mismatch or packet loss between worker subnet and database subnet.",
+          "Database instance resource exhaustion or disk IOPS throttling."
+        ],
+        "recommended_remediation": [
+          "Inspect AWS VPC flow logs and verify MTU path settings between worker subnet and DB subnet."
+        ],
+        "failed_approaches_warned": 0,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-010",
+      "case_title": "Order Fulfillment Backlog from CPU-Bound Invoice PDF Generation (Conflicting Evidence)",
+      "service": "order-fulfillment-worker",
+      "scenario_type": "conflicting_evidence",
+      "is_distractor": false,
+      "disabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "CPU-bound vector PDF invoice rendering library saturating worker compute capacity, NOT worker replica reduction.",
+          "Worker concurrency capacity reduction or queue consumer starvation."
+        ],
+        "recommended_remediation": [
+          "Rollback DEP-9380 vector PDF invoice dependency or offload PDF generation to dedicated async task queue."
+        ],
+        "failed_approaches_warned": 1,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "CPU-bound vector PDF invoice rendering library saturating worker compute capacity, NOT worker replica reduction.",
+          "Worker concurrency capacity reduction or queue consumer starvation."
+        ],
+        "recommended_remediation": [
+          "Rollback DEP-9380 vector PDF invoice dependency or offload PDF generation to dedicated async task queue."
+        ],
+        "failed_approaches_warned": 1,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-011",
+      "case_title": "Product Catalog Slowdown on Memory-Constrained Nodes (Unsafe Historical Fix)",
+      "service": "catalog-service",
+      "scenario_type": "unsafe_historical_fix",
+      "is_distractor": false,
+      "disabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Missing GIN index on jsonb attributes column under high search traffic with cluster NodeMemoryPressure.",
+          "Cluster node memory leak in kubelet or containerd."
+        ],
+        "recommended_remediation": [
+          "Create concurrent GIN index on products attributes column; do NOT scale pods horizontally due to node memory pressure."
+        ],
+        "failed_approaches_warned": 1,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 100.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": true,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Missing GIN index on jsonb attributes column under high search traffic with cluster NodeMemoryPressure.",
+          "Cluster node memory leak in kubelet or containerd."
+        ],
+        "recommended_remediation": [
+          "Create concurrent GIN index on products attributes column; do NOT scale pods horizontally due to node memory pressure."
+        ],
+        "failed_approaches_warned": 1,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    },
+    {
+      "case_id": "EVAL-012",
+      "case_title": "Streaming Event Pipeline Ingestion Freeze from Kafka Partition Rebalance Storm",
+      "service": "event-streaming-pipeline",
+      "scenario_type": "novel_incident",
+      "is_distractor": true,
+      "disabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Kafka consumer rebalance storm caused by consumer batch size increase exceeding max.poll.interval.ms.",
+          "Kafka broker cluster zookeeper/kraft quorum failure."
+        ],
+        "recommended_remediation": [
+          "Revert max.poll.records to 500 or increase max.poll.interval.ms to 600000ms."
+        ],
+        "failed_approaches_warned": 0,
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      },
+      "enabled": {
+        "score": 95.0,
+        "top_3_hit": true,
+        "avoided_failed": true,
+        "recalled_failed": false,
+        "false_recall": false,
+        "appropriate_uncertainty": true,
+        "hypotheses": [
+          "Kafka consumer rebalance storm caused by consumer batch size increase exceeding max.poll.interval.ms.",
+          "Kafka broker cluster zookeeper/kraft quorum failure."
+        ],
+        "recommended_remediation": [
+          "Revert max.poll.records to 500 or increase max.poll.interval.ms to 600000ms."
+        ],
+        "failed_approaches_warned": 0,
+        "historical_refs": [],
+        "model_used": "offline-rule-based-reasoning (Groq unconfigured)"
+      }
+    }
+  ]
+}
