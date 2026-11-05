@@ -85,3 +85,4 @@ Rather than relying on a single composite number, OPSRECALL scores investigation
 5. **False Historical Recall Rate (Lower=Better)**: Did the system hallucinate historical precedents for novel distractors? (Target: 0.0%).
 6. **Recommendation Grounding**: Did the generated SOP cite specific parameters, commit IDs, and verified configurations?
 7. **Uncertainty Calibration**: Did confidence scores reflect true empirical likelihood rather than uniform overconfidence?
+

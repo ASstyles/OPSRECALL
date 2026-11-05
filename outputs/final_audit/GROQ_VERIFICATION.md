@@ -73,3 +73,4 @@ The script `scripts/verify_groq.py` performs account-level model verification:
    ```bash
    python -m pytest tests/test_live_integration.py -k test_live_groq_generation_structured_json -v
    ```
+

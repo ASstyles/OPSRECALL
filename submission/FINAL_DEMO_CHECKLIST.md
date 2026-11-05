@@ -91,3 +91,4 @@ Use this repeatable checklist to verify, demonstrate, and judge OPSRECALL from t
   - Evaluates 12 cases across 7 dimensions with isolated ground truth.
   - Plotly dark bar chart renders comparisons across all 12 cases.
   - Shows +25.0 points gain on recurrent incidents and 100% failed fix avoidance.
+

@@ -37,3 +37,4 @@
 - **Status**: **OPERATIONAL RISK (Under Rapid Concurrent Load)**
 - **Technical Detail**: Free/developer Groq tiers enforce per-minute request limits. During rapid benchmark test runs (12 consecutive cases across both modes), bursts of API calls may experience rate-limit backoff.
 - **Remediation**: Exponential backoff is built into `core/llm_engine.py`, but dedicated enterprise API quotas are recommended for heavy continuous CI evaluation.
+

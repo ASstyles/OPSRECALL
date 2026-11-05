@@ -88,3 +88,4 @@ Executed via `python -m pytest -v`:
    python -m pytest tests/test_live_integration.py -v
    ```
 5. Once all 3 live integration tests pass, OPSRECALL achieves **FULL COMPETITION READINESS**.
+
