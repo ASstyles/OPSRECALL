@@ -38,13 +38,47 @@ class HindsightClientWrapper:
         bank_id: Optional[str] = None,
         test_bank_id: Optional[str] = None,
     ):
-        self.base_url = (base_url or settings.HINDSIGHT_BASE_URL).rstrip("/")
-        self.api_key = api_key or settings.HINDSIGHT_API_KEY
-        self.bank_id = bank_id or settings.HINDSIGHT_BANK_ID
-        self.test_bank_id = test_bank_id or settings.HINDSIGHT_TEST_BANK_ID
+        self._explicit_base_url = base_url
+        self._explicit_api_key = api_key
+        self._explicit_bank_id = bank_id
+        self._explicit_test_bank_id = test_bank_id
         self._client: Optional[Hindsight] = None
 
-        if self.is_configured:
+    @property
+    def base_url(self) -> str:
+        url = self._explicit_base_url or settings.HINDSIGHT_BASE_URL
+        return url.rstrip("/") if url else "https://api.hindsight.vectorize.io"
+
+    @property
+    def api_key(self) -> str:
+        return self._explicit_api_key or settings.HINDSIGHT_API_KEY
+
+    @property
+    def bank_id(self) -> str:
+        return self._explicit_bank_id or settings.HINDSIGHT_BANK_ID
+
+    @property
+    def test_bank_id(self) -> str:
+        return self._explicit_test_bank_id or settings.HINDSIGHT_TEST_BANK_ID
+
+    @property
+    def is_configured(self) -> bool:
+        """Check whether genuine Hindsight API credentials are provided."""
+        if self._explicit_api_key is not None:
+            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5)
+        return settings.is_hindsight_configured()
+
+    def reset(self) -> None:
+        """Reset internal client instance to pick up new configuration."""
+        self._client = None
+
+    def get_client(self) -> Hindsight:
+        """Retrieve client or initialize if credentials now exist."""
+        if not self.is_configured:
+            raise RuntimeError(
+                "Hindsight client is not configured. Please set HINDSIGHT_API_KEY in your .env file."
+            )
+        if self._client is None:
             try:
                 self._client = Hindsight(
                     base_url=self.base_url,
@@ -55,23 +89,18 @@ class HindsightClientWrapper:
             except Exception as e:
                 logger.error(f"Failed to initialize Hindsight SDK client: {e}")
                 self._client = None
-
-    @property
-    def is_configured(self) -> bool:
-        """Check whether minimum required credentials exist."""
-        return bool(self.api_key and len(self.api_key) > 5)
-
-    def get_client(self) -> Hindsight:
-        """Retrieve client or raise RuntimeError if unconfigured."""
-        if not self._client:
-            raise RuntimeError(
-                "Hindsight client is not configured. Please set HINDSIGHT_API_KEY in your .env file."
-            )
+                raise
         return self._client
 
     def check_health(self) -> Dict[str, Any]:
         """Perform a genuine health check against Hindsight Cloud."""
         if not self.is_configured:
+            env_file = settings.get_env_file_path()
+            env_msg = (
+                f".env file detected at '{env_file}', but HINDSIGHT_API_KEY is not set."
+                if env_file
+                else "No .env file found in project root. Copy .env.example to .env to configure credentials."
+            )
             return {
                 "status": "NOT_CONFIGURED",
                 "mode": "UNCONFIGURED",
@@ -80,10 +109,8 @@ class HindsightClientWrapper:
                 "version": None,
                 "bank_exists": False,
                 "message": (
-                    "HINDSIGHT_API_KEY is not configured. "
-                    "OPSRECALL is operating in offline inspection mode. "
-                    "To enable live persistent memory, copy .env.example to .env and "
-                    "add your Hindsight Cloud API key from https://hindsight.vectorize.io/"
+                    f"HINDSIGHT_API_KEY is not configured. {env_msg} "
+                    "OPSRECALL is operating in Offline Preview Mode with simulated operational memories."
                 ),
             }
 
@@ -283,10 +310,12 @@ class HindsightClientWrapper:
 _hindsight_wrapper_instance: Optional[HindsightClientWrapper] = None
 
 
-def get_hindsight_client() -> HindsightClientWrapper:
-    """Singleton getter for HindsightClientWrapper."""
+def get_hindsight_client(force_reload: bool = False) -> HindsightClientWrapper:
+    """Singleton getter for HindsightClientWrapper with optional reload."""
     global _hindsight_wrapper_instance
-    if _hindsight_wrapper_instance is None:
+    if _hindsight_wrapper_instance is None or force_reload:
+        if _hindsight_wrapper_instance is not None:
+            _hindsight_wrapper_instance.reset()
         _hindsight_wrapper_instance = HindsightClientWrapper()
     return _hindsight_wrapper_instance
 

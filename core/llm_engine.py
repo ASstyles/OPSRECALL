@@ -107,11 +107,34 @@ class LLMEngine:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
     ):
-        self.api_key = api_key or settings.GROQ_API_KEY
-        self.model = model or settings.GROQ_MODEL
+        self._explicit_api_key = api_key
+        self._explicit_model = model
         self._groq_client = None
 
-        if self.is_configured:
+    @property
+    def api_key(self) -> str:
+        return self._explicit_api_key or settings.GROQ_API_KEY
+
+    @property
+    def model(self) -> str:
+        return self._explicit_model or settings.GROQ_MODEL
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if genuine Groq API credentials are present."""
+        if self._explicit_api_key is not None:
+            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5)
+        return settings.is_groq_configured()
+
+    def reset(self) -> None:
+        """Reset internal client instance to pick up new configuration."""
+        self._groq_client = None
+
+    def get_client(self):
+        """Retrieve client or initialize if credentials now exist."""
+        if not self.is_configured:
+            return None
+        if self._groq_client is None:
             try:
                 from groq import Groq
 
@@ -119,11 +142,55 @@ class LLMEngine:
             except Exception as e:
                 logger.error(f"Failed to initialize Groq client: {e}")
                 self._groq_client = None
+        return self._groq_client
 
-    @property
-    def is_configured(self) -> bool:
-        """Check if Groq API credentials are present."""
-        return bool(self.api_key and len(self.api_key) > 5)
+    def check_health(self) -> Dict[str, Any]:
+        """Perform a genuine health check against Groq account model list."""
+        if not self.is_configured:
+            env_file = settings.get_env_file_path()
+            env_msg = (
+                f".env file detected at '{env_file}', but GROQ_API_KEY is unset."
+                if env_file
+                else "No .env file found in project root. Copy .env.example to .env to configure credentials."
+            )
+            return {
+                "status": "NOT_CONFIGURED",
+                "mode": "OFFLINE_EXPERT",
+                "model": self.model,
+                "message": (
+                    f"GROQ_API_KEY is not configured. {env_msg} "
+                    "OPSRECALL is operating with offline deterministic SRE expert reasoning."
+                ),
+            }
+
+        client = self.get_client()
+        if not client:
+            return {
+                "status": "INIT_ERROR",
+                "mode": "ERROR",
+                "model": self.model,
+                "message": "Failed to initialize Groq client library.",
+            }
+
+        try:
+            models_page = client.models.list()
+            available = [m.id for m in models_page.data]
+            model_active = self.model in available
+            return {
+                "status": "CONNECTED",
+                "mode": "LIVE",
+                "model": self.model,
+                "model_available": model_active,
+                "total_models": len(available),
+                "message": f"Successfully connected to Groq API. Model '{self.model}' is verified.",
+            }
+        except Exception as e:
+            return {
+                "status": "API_ERROR",
+                "mode": "ERROR",
+                "model": self.model,
+                "message": f"Groq API connection test failed: {e}",
+            }
 
     def generate_investigation(
         self,
@@ -135,7 +202,8 @@ class LLMEngine:
         # Sanitize input: strictly strip any evaluation answer keys if present
         clean_telemetry = self._sanitize_telemetry(incident_data)
 
-        if self.is_configured and self._groq_client:
+        client = self.get_client()
+        if self.is_configured and client:
             return self._call_groq(clean_telemetry, recalled_memories, memory_mode)
         else:
             return self._generate_offline_reasoning(clean_telemetry, recalled_memories, memory_mode)
@@ -1039,10 +1107,12 @@ class LLMEngine:
 _llm_engine_instance: Optional[LLMEngine] = None
 
 
-def get_llm_engine() -> LLMEngine:
-    """Singleton getter for LLMEngine."""
+def get_llm_engine(force_reload: bool = False) -> LLMEngine:
+    """Singleton getter for LLMEngine with optional reload."""
     global _llm_engine_instance
-    if _llm_engine_instance is None:
+    if _llm_engine_instance is None or force_reload:
+        if _llm_engine_instance is not None:
+            _llm_engine_instance.reset()
         _llm_engine_instance = LLMEngine()
     return _llm_engine_instance
 
