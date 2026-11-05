@@ -1,0 +1,253 @@
+"""
+Hindsight Client wrapper for OPSRECALL.
+Integrates with the official `hindsight-client` Python SDK.
+Provides robust connection health checks, memory bank creation/verification,
+and typed interfaces for RETAIN, RECALL, and REFLECT operations.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional
+from config import settings
+
+# Official Hindsight Client and Models
+from hindsight_client import (
+    Hindsight,
+    RecallResponse,
+    RecallResult,
+    RetainResponse,
+    ReflectResponse,
+)
+from hindsight_client_api.exceptions import (
+    ApiException,
+    NotFoundException,
+    UnauthorizedException,
+)
+
+logger = logging.getLogger("opsrecall.hindsight")
+
+
+class HindsightClientWrapper:
+    """Wrapper around the official Hindsight SDK with error handling and health checks."""
+
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        bank_id: Optional[str] = None,
+    ):
+        self.base_url = (base_url or settings.HINDSIGHT_BASE_URL).rstrip("/")
+        self.api_key = api_key or settings.HINDSIGHT_API_KEY
+        self.bank_id = bank_id or settings.HINDSIGHT_BANK_ID
+        self._client: Optional[Hindsight] = None
+
+        if self.is_configured:
+            try:
+                self._client = Hindsight(
+                    base_url=self.base_url,
+                    api_key=self.api_key,
+                    timeout=30.0,
+                    user_agent="OPSRECALL-Incident-Agent/1.0",
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize Hindsight SDK client: {e}")
+                self._client = None
+
+    @property
+    def is_configured(self) -> bool:
+        """Check whether minimum required credentials exist."""
+        return bool(self.api_key and len(self.api_key) > 5)
+
+    def get_client(self) -> Hindsight:
+        """Retrieve client or raise RuntimeError if unconfigured."""
+        if not self._client:
+            raise RuntimeError(
+                "Hindsight client is not configured. Please set HINDSIGHT_API_KEY in your .env file."
+            )
+        return self._client
+
+    def check_health(self) -> Dict[str, Any]:
+        """Perform a genuine health check against Hindsight Cloud."""
+        if not self.is_configured:
+            return {
+                "status": "NOT_CONFIGURED",
+                "mode": "UNCONFIGURED",
+                "bank_id": self.bank_id,
+                "base_url": self.base_url,
+                "version": None,
+                "bank_exists": False,
+                "message": (
+                    "HINDSIGHT_API_KEY is not configured. "
+                    "OPSRECALL is operating in offline inspection mode. "
+                    "To enable live persistent memory, copy .env.example to .env and "
+                    "add your Hindsight Cloud API key from https://hindsight.vectorize.io/"
+                ),
+            }
+
+        try:
+            client = self.get_client()
+
+            # 1. Check API Version
+            version_str = "connected"
+            try:
+                version_info = client.get_version()
+                version_str = getattr(version_info, "version", str(version_info))
+            except Exception as v_err:
+                logger.warning(f"Could not retrieve Hindsight version: {v_err}")
+
+            # 2. Verify or create dedicated bank
+            bank_exists = False
+            try:
+                client.get_bank_profile(self.bank_id)
+                bank_exists = True
+            except NotFoundException:
+                logger.info(f"Bank '{self.bank_id}' not found. Creating dedicated bank...")
+                client.create_bank(
+                    bank_id=self.bank_id,
+                    name="OPSRECALL Operational Memory Bank",
+                    reflect_mission=(
+                        "OPSRECALL Incident Memory Bank: Store and recall operational SRE incidents, "
+                        "deployment change records, failed mitigations, and verified resolutions."
+                    ),
+                )
+                bank_exists = True
+
+            return {
+                "status": "CONNECTED",
+                "mode": "LIVE",
+                "bank_id": self.bank_id,
+                "base_url": self.base_url,
+                "version": version_str,
+                "bank_exists": bank_exists,
+                "message": f"Successfully connected to Hindsight Cloud. Memory bank '{self.bank_id}' is active.",
+            }
+
+        except UnauthorizedException as auth_err:
+            return {
+                "status": "AUTHENTICATION_FAILED",
+                "mode": "ERROR",
+                "bank_id": self.bank_id,
+                "base_url": self.base_url,
+                "version": None,
+                "bank_exists": False,
+                "message": f"Hindsight authentication rejected (401 Unauthorized): {auth_err}",
+            }
+        except ApiException as api_err:
+            return {
+                "status": "API_ERROR",
+                "mode": "ERROR",
+                "bank_id": self.bank_id,
+                "base_url": self.base_url,
+                "version": None,
+                "bank_exists": False,
+                "message": f"Hindsight API returned an error: {api_err}",
+            }
+        except Exception as ex:
+            return {
+                "status": "CONNECTION_FAILED",
+                "mode": "ERROR",
+                "bank_id": self.bank_id,
+                "base_url": self.base_url,
+                "version": None,
+                "bank_exists": False,
+                "message": f"Could not reach Hindsight server at {self.base_url}: {ex}",
+            }
+
+    def ensure_bank_exists(self, bank_id: Optional[str] = None) -> bool:
+        """Ensure the target memory bank exists; create it if missing."""
+        target_bank = bank_id or self.bank_id
+        client = self.get_client()
+        try:
+            client.get_bank_profile(target_bank)
+            return True
+        except NotFoundException:
+            client.create_bank(
+                bank_id=target_bank,
+                name="OPSRECALL Incident Bank",
+                reflect_mission="Store operational incidents, root causes, failed mitigations, and resolutions.",
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error ensuring bank exists: {e}")
+            raise
+
+    def retain(
+        self,
+        content: str,
+        document_id: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+        tags: Optional[List[str]] = None,
+        timestamp: Optional[str] = None,
+        bank_id: Optional[str] = None,
+        retain_async: bool = False,
+    ) -> RetainResponse:
+        """Store incident experience into Hindsight memory bank."""
+        client = self.get_client()
+        target_bank = bank_id or self.bank_id
+
+        # Clean metadata dictionary so values are strings
+        clean_metadata = {k: str(v) for k, v in (metadata or {}).items()}
+
+        response = client.retain(
+            bank_id=target_bank,
+            content=content,
+            document_id=document_id,
+            metadata=clean_metadata,
+            tags=tags or [],
+            timestamp=timestamp,
+            retain_async=retain_async,
+        )
+        return response
+
+    def recall(
+        self,
+        query: str,
+        max_tokens: int = 4096,
+        budget: str = "mid",
+        tags: Optional[List[str]] = None,
+        bank_id: Optional[str] = None,
+    ) -> RecallResponse:
+        """Recall relevant historical operational memories via semantic & TEMPR search."""
+        client = self.get_client()
+        target_bank = bank_id or self.bank_id
+
+        response = client.recall(
+            bank_id=target_bank,
+            query=query,
+            max_tokens=max_tokens,
+            budget=budget,
+            tags=tags,
+        )
+        return response
+
+    def reflect(
+        self,
+        query: str,
+        budget: str = "mid",
+        context: Optional[str] = None,
+        bank_id: Optional[str] = None,
+    ) -> ReflectResponse:
+        """Generate high-level operational reflections and recurring pattern analyses."""
+        client = self.get_client()
+        target_bank = bank_id or self.bank_id
+
+        response = client.reflect(
+            bank_id=target_bank,
+            query=query,
+            budget=budget,
+            context=context,
+        )
+        return response
+
+
+_hindsight_wrapper_instance: Optional[HindsightClientWrapper] = None
+
+
+def get_hindsight_client() -> HindsightClientWrapper:
+    """Singleton getter for HindsightClientWrapper."""
+    global _hindsight_wrapper_instance
+    if _hindsight_wrapper_instance is None:
+        _hindsight_wrapper_instance = HindsightClientWrapper()
+    return _hindsight_wrapper_instance
+

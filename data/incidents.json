@@ -1,0 +1,221 @@
+[
+  {
+    "incident_id": "INC-001",
+    "incident_title": "Checkout API Latency Spike Post-Deployment",
+    "affected_service": "checkout-api",
+    "incident_timestamp": "2026-10-12T14:22:00Z",
+    "severity": "SEV-1",
+    "symptoms": [
+      "P99 latency surged from 120ms to 8500ms on /checkout/process",
+      "HTTP 504 Gateway Timeout rate spiked to 18%",
+      "Client checkout drop-off rate increased by 42%"
+    ],
+    "error_logs": [
+      "[2026-10-12 14:23:05] ERROR checkout.db.pool: Connection checkout timed out after 30000ms. Active: 10, Idle: 0, Waiting: 142",
+      "[2026-10-12 14:23:12] WARN  checkout.http.handler: Upstream DB request exceeded SLA threshold (p99 > 5s)",
+      "[2026-10-12 14:24:01] ERROR checkout.server: Thread pool saturation detected; worker pool exhausted"
+    ],
+    "metrics": {
+      "p99_latency_ms": 8500,
+      "p50_latency_ms": 420,
+      "error_rate_pct": 18.4,
+      "db_pool_utilization_pct": 100.0,
+      "db_wait_queue_depth": 142,
+      "active_connections": 10,
+      "cpu_utilization_pct": 34.2
+    },
+    "deployment_id": "DEP-8492",
+    "deployment_or_change": "Deployment DEP-8492 updated Helm values: max_db_connections inadvertently lowered from 150 to 10 during Helm chart refactor; max_wait_time set to 30s.",
+    "suspected_cause": "Initial suspicion was database server CPU saturation or slow queries on checkout tables.",
+    "actual_verified_root_cause": "Database connection pool misconfiguration in Helm values (max connections capped at 10 instead of 150) creating severe thread starvation under normal traffic load.",
+    "diagnostic_actions_attempted": [
+      "Checked PostgreSQL RDS CPU and memory metrics (both normal at ~25%)",
+      "Examined pg_stat_activity: only 10 active connections observed from checkout-api pods",
+      "Inspected application container logs for slow queries"
+    ],
+    "failed_mitigation_attempts": [
+      "Increased checkout-api HTTP client timeout from 5s to 15s. FAILED: Did not alleviate thread pool starvation; exacerbated backlog and increased client timeout errors",
+      "Horizontally scaled checkout-api pods from 4 to 12. FAILED: Each pod still had max 10 connections, and DB connection thrashing worsened wait queue latency"
+    ],
+    "successful_mitigation": "Hot-patched Helm values restoring max_db_connections to 150 and connection timeout to 2000ms. Rolling restart of checkout-api pods.",
+    "resolution": "Connection pool config was restored and validated. P99 latency immediately dropped back to 110ms and error rate dropped to 0%.",
+    "resolution_outcome": "Fully Resolved. Permanent Helm validation test added to CI/CD pipeline preventing max_connections < 50.",
+    "verification_evidence": "Grafana dashboard showed DB wait queue drained within 45 seconds of rollout; P99 latency stabilized at 115ms.",
+    "lessons_learned": "Never increase client-side timeouts when connection pool starvation is the bottleneck. Always verify pool capacity configuration against incoming request concurrency.",
+    "data_type": "SIMULATED_HISTORICAL_INCIDENT"
+  },
+  {
+    "incident_id": "INC-002",
+    "incident_title": "Orders Queue Backlog Accumulation",
+    "affected_service": "order-fulfillment-worker",
+    "incident_timestamp": "2026-10-18T09:15:00Z",
+    "severity": "SEV-2",
+    "symptoms": [
+      "RabbitMQ order-events queue length grew from 50 to 38,000 unprocessed messages",
+      "Customer order confirmation email delay exceeded 45 minutes",
+      "Fulfillment pipeline SLA breached"
+    ],
+    "error_logs": [
+      "[2026-10-18 09:16:22] WARN  queue.monitor: Queue 'order-events' depth threshold exceeded (>5000)",
+      "[2026-10-18 09:20:10] INFO  order.worker: Processed 12 msgs/sec (target: 250 msgs/sec)",
+      "[2026-10-18 09:22:45] WARN  consumer.manager: Total active consumer channels: 2 (expected: 24)"
+    ],
+    "metrics": {
+      "queue_depth": 38450,
+      "consumption_rate_msg_sec": 12,
+      "inflow_rate_msg_sec": 240,
+      "active_workers": 2,
+      "target_workers": 24,
+      "worker_cpu_pct": 12.0
+    },
+    "deployment_id": "DEP-8510",
+    "deployment_or_change": "Deployment DEP-8510 modified worker deployment replica count and concurrency settings: replica count accidentally reduced to 1 with concurrency=2 during autoscaler YAML migration.",
+    "suspected_cause": "Downstream inventory service throttling or message serialization errors causing slow message processing.",
+    "actual_verified_root_cause": "Worker capacity inadvertently slashed from 24 concurrent consumers to 2 due to misconfigured HPA minReplicas and concurrency flag in DEP-8510.",
+    "diagnostic_actions_attempted": [
+      "Profiled worker execution time per message: confirmed processing time was healthy at 48ms/message",
+      "Checked RabbitMQ server CPU, disk I/O, and memory: broker healthy",
+      "Inspected Kubernetes deployment manifest: found replicas=1, concurrency=2"
+    ],
+    "failed_mitigation_attempts": [
+      "Purged dead-letter queue (DLQ) thinking poison pill messages blocked processing. FAILED: Queue was not blocked by poison pills; processing remained at 12 msgs/sec",
+      "Restarted RabbitMQ cluster broker node. FAILED: Caused brief disconnect for all services without solving consumer deficit"
+    ],
+    "successful_mitigation": "Corrected Kubernetes HPA manifest setting minReplicas=12 and concurrency=8. Scaled deployment to 12 pods immediately.",
+    "resolution": "Worker capacity restored to 96 active consumers. Backlog of 38,000 messages cleared in under 6 minutes.",
+    "resolution_outcome": "Fully Resolved. Added GitOps drift detection on worker deployment replica parameters.",
+    "verification_evidence": "Queue depth returned to normal baseline (<50) and message ingestion latency returned to <500ms.",
+    "lessons_learned": "When queue depth increases while individual message processing duration is normal, suspect consumer concurrency and worker capacity before blaming message contents or broker.",
+    "data_type": "SIMULATED_HISTORICAL_INCIDENT"
+  },
+  {
+    "incident_id": "INC-003",
+    "incident_title": "Payment API Gateway 502 Bad Gateway Outage",
+    "affected_service": "payment-gateway",
+    "incident_timestamp": "2026-10-24T03:04:00Z",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Payment processing endpoint returning 100% HTTP 502 Bad Gateway",
+      "Total checkout transaction failure for credit card processing",
+      "Ingress controller emitting SSL handshake alert failures"
+    ],
+    "error_logs": [
+      "[2026-10-24 03:04:12] ERROR ingress.envoy: upstream SSL handshake failed: certificate verify failed: certificate has expired (x509: certificate has expired or is not yet valid: 2026-10-24 03:00:00 UTC)",
+      "[2026-10-24 03:04:15] ERROR payment.client: HandshakeException: Handshake failed to https://internal-payment-vault.prod.internal:8443",
+      "[2026-10-24 03:05:00] CRIT  payment.service: Downstream payment vault connection terminated with TLS alert 45"
+    ],
+    "metrics": {
+      "http_502_rate_pct": 100.0,
+      "successful_txn_count": 0,
+      "p99_latency_ms": 12,
+      "active_connections": 0,
+      "cert_expiry_seconds_remaining": -240
+    },
+    "deployment_id": "NONE",
+    "deployment_or_change": "No software deployment; automated cert-manager renewal job failed 2 days prior due to expired IAM token on the Let's Encrypt / Vault DNS solver.",
+    "suspected_cause": "Payment vault service crash or internal VPC network partition.",
+    "actual_verified_root_cause": "Internal TLS certificate on internal-payment-vault expired at 03:00:00 UTC due to a silent cert-manager renewal failure.",
+    "diagnostic_actions_attempted": [
+      "Ran curl -Iv to internal-payment-vault: observed SSL certificate expired error",
+      "Checked pod status for payment-vault: pods were running and healthy, but TLS listener was serving expired cert",
+      "Inspected cert-manager logs: found failed renewal challenge due to stale IAM credentials"
+    ],
+    "failed_mitigation_attempts": [
+      "Bypassed ingress by restarting payment-gateway pods. FAILED: Pods still could not establish mTLS with payment-vault",
+      "Toggled payment-gateway to ignore SSL verification in dev config flag. FAILED: Production policy rejected insecure TLS flag and pod crashed on startup"
+    ],
+    "successful_mitigation": "Manually triggered certificate rotation via Vault CLI with refreshed IAM token; issued new TLS cert and reloaded payment-vault secret.",
+    "resolution": "Fresh TLS certificate loaded into payment-vault pods. Ingress SSL handshakes succeeded immediately.",
+    "resolution_outcome": "Fully Resolved. Configured Prometheus alert cert_expiry_days < 14 with PagerDuty integration.",
+    "verification_evidence": "Successful TLS handshake verified via openssl s_client; HTTP 200 response rate recovered to 100%.",
+    "lessons_learned": "502 Bad Gateway with immediate latency drops (<20ms) and handshake errors indicates TLS/cert failure rather than backend server overload.",
+    "data_type": "SIMULATED_HISTORICAL_INCIDENT"
+  },
+  {
+    "incident_id": "INC-004",
+    "incident_title": "Product Catalog DB Spike caused by Cache Stampede",
+    "affected_service": "catalog-service",
+    "incident_timestamp": "2026-10-30T11:00:00Z",
+    "severity": "SEV-2",
+    "symptoms": [
+      "PostgreSQL primary CPU spiked from 18% to 99% in 90 seconds",
+      "Catalog query latency spiked from 8ms to 4200ms",
+      "Redis cache hit ratio plummeted from 98.4% to 12.1%"
+    ],
+    "error_logs": [
+      "[2026-10-30 11:00:15] WARN  redis.client: Cache key 'homepage_featured_products' expired",
+      "[2026-10-30 11:00:16] ERROR postgres.slow_query: duration: 3890.12 ms statement: SELECT * FROM products WHERE is_featured = true JOIN inventory ...",
+      "[2026-10-30 11:00:22] WARN  catalog.cache: High concurrent cache misses detected for single key: 1,420 queries in 500ms"
+    ],
+    "metrics": {
+      "db_cpu_pct": 99.1,
+      "cache_hit_ratio_pct": 12.1,
+      "p99_latency_ms": 4200,
+      "concurrent_db_queries": 1420,
+      "redis_memory_mb": 1024
+    },
+    "deployment_id": "DEP-8540",
+    "deployment_or_change": "Deployment DEP-8540 standardized cache TTLs to exactly 3600 seconds without jitter; invalidation cache key expired simultaneously for top 50 categories.",
+    "suspected_cause": "DDoS attack or runaway unindexed search query from web crawler.",
+    "actual_verified_root_cause": "Cache stampede (dog-piling effect): synchronized exact TTL expiration on high-cardinality keys caused thousands of concurrent threads to hit DB simultaneously.",
+    "diagnostic_actions_attempted": [
+      "Checked nginx access logs: verified traffic volume was normal (~3,000 req/sec), ruling out DDoS",
+      "Inspected pg_stat_activity: hundreds of identical queries for 'homepage_featured_products'",
+      "Checked Redis keyspace: verified key had expired with no probabilistic refresh or mutex lock"
+    ],
+    "failed_mitigation_attempts": [
+      "Flushed Redis cache entirely to force a clean cache state. FAILED: Catastrophic; drove DB CPU to 100% and caused cascade failures across secondary services",
+      "Added read-replica to database. FAILED: Took 20 minutes to provision and did not address synchronized key expiration"
+    ],
+    "successful_mitigation": "Implemented single-flight distributed mutex lock on cache misses and added random TTL jitter (3600s +/- 15%). Manually warmed high-traffic keys via script.",
+    "resolution": "Cache hit ratio recovered to 99.1%. DB CPU decreased to 14%. Single-flight prevented duplicate queries for in-flight DB fetch.",
+    "resolution_outcome": "Fully Resolved. Single-flight cache pattern and TTL jitter mandated in shared caching library.",
+    "verification_evidence": "Database CPU stabilized at 15%; Redis hit ratio held steady at >98.5% across scheduled TTL intervals.",
+    "lessons_learned": "Never flush cache during a cache stampede. Always implement single-flight locks (dog-piling protection) and randomized TTL jitter for hot keys.",
+    "data_type": "SIMULATED_HISTORICAL_INCIDENT"
+  },
+  {
+    "incident_id": "INC-005",
+    "incident_title": "Checkout Cascading Failures from External Payment Gateway Degradation",
+    "affected_service": "checkout-orchestrator",
+    "incident_timestamp": "2026-11-02T16:45:00Z",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Checkout orchestrator threads saturated waiting on third-party PayCorp API",
+      "Cart service and frontend web tier crashed due to socket pool exhaustion",
+      "Overall site responsiveness degraded across unrelated product pages"
+    ],
+    "error_logs": [
+      "[2026-11-02 16:46:10] WARN  http.client: Request to https://api.paycorp.external/v2/charge taking >25000ms",
+      "[2026-11-02 16:47:00] ERROR orchestrator.pool: HTTP connection pool exhausted (max 500 connections in CLOSE_WAIT/ESTABLISHED)",
+      "[2026-11-02 16:47:30] CRIT  gateway.circuit: Circuit breaker missing or set to fail-open; cascading timeouts propagating to edge"
+    ],
+    "metrics": {
+      "paycorp_upstream_latency_ms": 28000,
+      "checkout_pod_restarts": 14,
+      "socket_exhaustion_rate_pct": 100.0,
+      "unrelated_page_latency_ms": 6200,
+      "failed_orders_rate_pct": 84.0
+    },
+    "deployment_id": "DEP-8565",
+    "deployment_or_change": "DEP-8565 migrated to new PayCorp SDK which bypassed the internal Resilience4j circuit breaker and used an unbounded timeout of 60 seconds.",
+    "suspected_cause": "Internal memory leak in checkout-orchestrator pod or Kubernetes CNI network degradation.",
+    "actual_verified_root_cause": "External payment partner PayCorp had 30s latency degradation; lack of circuit breaker and aggressive timeouts in checkout-orchestrator exhausted all HTTP connections and thread pools.",
+    "diagnostic_actions_attempted": [
+      "Monitored pod memory: saw sawtooth pattern indicating OOMKilled from unbounded queued requests",
+      "Ran network traceroute to PayCorp endpoints: identified 25s latency outside our AWS VPC",
+      "Checked PayCorp status page: confirmed Major Service Outage on their transaction processing engine"
+    ],
+    "failed_mitigation_attempts": [
+      "Restarted checkout-orchestrator pods repeatedly. FAILED: Newly started pods immediately saturated connection pools within 15 seconds and crashed",
+      "Increased pod memory limit from 2Gi to 4Gi. FAILED: Simply delayed OOMKill by 2 minutes without preventing socket exhaustion"
+    ],
+    "successful_mitigation": "Activated emergency circuit-breaker fallback in checkout config: fast-failed PayCorp requests after 3000ms timeout and routed users to alternative payment provider (Stripe fallback).",
+    "resolution": "Circuit breaker opened after 5 consecutive timeouts; traffic successfully shifted to secondary payment rail. Checkout orchestrator recovered stability immediately.",
+    "resolution_outcome": "Fully Resolved. Dual-rail payment architecture enforced with automatic failover circuit breaker.",
+    "verification_evidence": "Checkout success rate restored to 98.2% via secondary provider; connection pool utilization stabilized at 28%.",
+    "lessons_learned": "Third-party APIs will degrade. External integrations must always have tight timeouts (<3s), circuit breakers, and automated fallback paths.",
+    "data_type": "SIMULATED_HISTORICAL_INCIDENT"
+  }
+]
+

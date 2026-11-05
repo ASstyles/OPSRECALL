@@ -1,0 +1,178 @@
+[
+  {
+    "case_id": "EVAL-001",
+    "case_title": "Checkout Latency Surge After Helm Chart Parameter Tweak",
+    "affected_service": "checkout-api",
+    "severity": "SEV-1",
+    "symptoms": [
+      "P99 latency surged to 7800ms",
+      "504 Gateway Timeouts on /checkout/pay",
+      "Client pool wait errors in application logs"
+    ],
+    "error_logs": [
+      "ERROR [checkout-api] Connection acquisition timeout: 30000ms elapsed waiting for pool connection. Pool stats: active=10, pending=89",
+      "WARN  [checkout-api] Thread saturation: worker pool 98% capacity utilized"
+    ],
+    "metrics": {
+      "p99_latency_ms": 7800,
+      "error_rate_pct": 14.5,
+      "db_pool_utilization_pct": 100.0,
+      "active_connections": 10
+    },
+    "recent_deployment": "DEP-9102 updated Helm values for checkout microservice including pool sizing and database timeout settings.",
+    "configuration_changes": "max_connections modified in deployment values yaml",
+    "ground_truth_root_cause": "Database connection pool misconfiguration / starvation (pool capped too low for incoming concurrency)",
+    "expected_historical_match": "INC-001",
+    "unsuccessful_mitigations_to_avoid": [
+      "Increasing client HTTP timeouts",
+      "Scaling pod replicas without fixing DB pool limits"
+    ],
+    "is_distractor": false
+  },
+  {
+    "case_id": "EVAL-002",
+    "case_title": "Rapid Fulfillment Queue Buildup After Autoscaler Migration",
+    "affected_service": "order-fulfillment-worker",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Queue length jumped to 25,000 unprocessed orders",
+      "Consumer throughput dropped below 15 messages/second",
+      "Individual task execution time is normal (42ms)"
+    ],
+    "error_logs": [
+      "WARN  [queue-monitor] Backlog threshold exceeded on queue 'order-events' (current: 25400)",
+      "INFO  [order-worker] Active consumer channels: 2"
+    ],
+    "metrics": {
+      "queue_depth": 25400,
+      "consumption_rate_msg_sec": 14,
+      "active_workers": 2,
+      "target_workers": 20
+    },
+    "recent_deployment": "DEP-9120 migrated autoscaler from custom cron to Kubernetes HPA v2.",
+    "configuration_changes": "HPA minReplicas and concurrency settings adjusted",
+    "ground_truth_root_cause": "Worker replica count and concurrency settings reduced, causing consumer starvation despite healthy individual message execution",
+    "expected_historical_match": "INC-002",
+    "unsuccessful_mitigations_to_avoid": [
+      "Purging dead-letter queue (DLQ)",
+      "Restarting RabbitMQ broker"
+    ],
+    "is_distractor": false
+  },
+  {
+    "case_id": "EVAL-003",
+    "case_title": "Immediate 502 Bad Gateway Errors on Internal Payment Endpoint",
+    "affected_service": "payment-gateway",
+    "severity": "SEV-1",
+    "symptoms": [
+      "100% of payment authorization calls fail with HTTP 502",
+      "Latency to upstream vault is under 15ms (fast failure)",
+      "SSL handshake verification failure"
+    ],
+    "error_logs": [
+      "ERROR [envoy-ingress] upstream SSL handshake failed: x509: certificate has expired or is not yet valid",
+      "CRIT  [payment-gateway] Downstream payment vault connection terminated with TLS alert 45"
+    ],
+    "metrics": {
+      "http_502_rate_pct": 100.0,
+      "p99_latency_ms": 15,
+      "cert_expiry_seconds_remaining": -180
+    },
+    "recent_deployment": "No code deployment in last 48 hours.",
+    "configuration_changes": "None",
+    "ground_truth_root_cause": "Expired downstream internal TLS certificate causing ingress SSL handshake failure",
+    "expected_historical_match": "INC-003",
+    "unsuccessful_mitigations_to_avoid": [
+      "Restarting payment gateway pods",
+      "Bypassing ingress SSL checks in production"
+    ],
+    "is_distractor": false
+  },
+  {
+    "case_id": "EVAL-004",
+    "case_title": "Severe Database Load Following Scheduled Cache Expiry",
+    "affected_service": "catalog-service",
+    "severity": "SEV-2",
+    "symptoms": [
+      "PostgreSQL CPU spiked to 98%",
+      "Redis cache hit ratio dropped from 99% to 15%",
+      "Thousands of identical queries executed concurrently on hot keys"
+    ],
+    "error_logs": [
+      "WARN  [catalog-cache] High concurrent cache misses detected for single key: 1100 queries in 300ms",
+      "ERROR [postgres] slow query duration: 4100ms statement: SELECT * FROM products WHERE is_featured = true"
+    ],
+    "metrics": {
+      "db_cpu_pct": 98.4,
+      "cache_hit_ratio_pct": 14.8,
+      "p99_latency_ms": 4100,
+      "concurrent_db_queries": 1100
+    },
+    "recent_deployment": "DEP-9180 updated cache TTL values across catalog domain to uniform 1 hour without jitter.",
+    "configuration_changes": "Cache key TTL set to exact 3600s",
+    "ground_truth_root_cause": "Cache stampede / dog-piling due to synchronized key expiration and lack of single-flight mutex lock",
+    "expected_historical_match": "INC-004",
+    "unsuccessful_mitigations_to_avoid": [
+      "Flushing the entire Redis cache",
+      "Provisioning a new DB read replica during the incident"
+    ],
+    "is_distractor": false
+  },
+  {
+    "case_id": "EVAL-005",
+    "case_title": "Thread Exhaustion and Pod OOM Crashes from Third-Party API Latency",
+    "affected_service": "checkout-orchestrator",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Checkout orchestrator pods experiencing repeated OOMKilled events",
+      "Connection pool saturated with sockets held in ESTABLISHED state for >30s",
+      "Cascading slowdown across un-related frontend routes"
+    ],
+    "error_logs": [
+      "WARN  [http-client] Upstream partner payment API taking >28000ms to respond",
+      "ERROR [checkout-orchestrator] Socket pool exhausted; 500/500 connections busy",
+      "CRIT  [system] Pod checkout-orchestrator-7d84f9b OOMKilled"
+    ],
+    "metrics": {
+      "upstream_latency_ms": 29000,
+      "pod_restarts": 12,
+      "failed_orders_rate_pct": 86.0
+    },
+    "recent_deployment": "DEP-9210 upgraded external payment partner SDK with default 60s timeout.",
+    "configuration_changes": "Partner SDK timeout changed to 60s; circuit breaker disabled",
+    "ground_truth_root_cause": "Third-party payment gateway degradation causing cascading socket exhaustion and pod crashes due to missing circuit breaker and excessive timeouts",
+    "expected_historical_match": "INC-005",
+    "unsuccessful_mitigations_to_avoid": [
+      "Repeatedly restarting checkout pods without circuit breaking",
+      "Simply increasing pod memory limits"
+    ],
+    "is_distractor": false
+  },
+  {
+    "case_id": "EVAL-006",
+    "case_title": "Static Assets Returning HTTP 403 on CDN Edge (Novel Incident)",
+    "affected_service": "cdn-edge",
+    "severity": "SEV-3",
+    "symptoms": [
+      "Client browsers unable to load static JS/CSS bundles (HTTP 403 Forbidden)",
+      "Main web application is healthy and API endpoints return 200",
+      "Origin S3 bucket returns AccessDenied"
+    ],
+    "error_logs": [
+      "ERROR [cloudflare-cdn] Origin returned 403 Forbidden for URI /static/bundle.v2.js",
+      "ERROR [s3-origin] AccessDenied: User does not have s3:GetObject on bucket web-assets-prod"
+    ],
+    "metrics": {
+      "cdn_403_rate_pct": 89.0,
+      "origin_api_200_rate_pct": 99.8,
+      "p99_latency_ms": 45
+    },
+    "recent_deployment": "DEP-9250 updated Terraform IAM policy for asset storage bucket.",
+    "configuration_changes": "S3 bucket policy IAM principal updated",
+    "ground_truth_root_cause": "S3 bucket IAM policy misconfiguration revoking CDN origin access",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [],
+    "is_distractor": true
+  }
+]
+
