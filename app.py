@@ -39,91 +39,139 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------------------------
-# Custom CSS for Enterprise Dark Aesthetic (Navy / Slate / Charcoal / Cyan)
+# High-End Enterprise UI/UX Design System (Glassmorphic Dark Navy / Cyan / Slate)
 # ------------------------------------------------------------------------------
 ENTERPRISE_CSS = """
 <style>
-/* Global Reset & Typography */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Global Font & Canvas */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 code, pre {
     font-family: 'JetBrains+Mono', monospace !important;
 }
 
-/* Main App Canvas */
+/* Background Atmosphere */
 .stApp {
-    background-color: #080c14;
+    background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.06) 0%, rgba(8, 12, 20, 1) 50%), #080c14;
     color: #e2e8f0;
 }
 
-/* Reduced & Refined Header Sizes */
+/* Polished Title & Headings */
 h1 {
-    font-size: 1.7rem !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.025em !important;
+    font-size: 1.75rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
     color: #f8fafc !important;
     margin-top: 0 !important;
-    margin-bottom: 0.25rem !important;
+    margin-bottom: 0.2rem !important;
     padding-bottom: 0 !important;
 }
 
 h2 {
     font-size: 1.25rem !important;
-    font-weight: 600 !important;
-    letter-spacing: -0.015em !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
     color: #f1f5f9 !important;
-    margin-top: 1rem !important;
-    margin-bottom: 0.5rem !important;
+    margin-top: 1.1rem !important;
+    margin-bottom: 0.45rem !important;
 }
 
 h3 {
     font-size: 1.05rem !important;
     font-weight: 600 !important;
     color: #e2e8f0 !important;
-    margin-top: 0.75rem !important;
-    margin-bottom: 0.35rem !important;
+    margin-top: 0.8rem !important;
+    margin-bottom: 0.3rem !important;
 }
 
-h4 {
-    font-size: 0.95rem !important;
-    font-weight: 600 !important;
-    color: #cbd5e1 !important;
-    margin-top: 0.5rem !important;
-    margin-bottom: 0.25rem !important;
+/* Hero Badge */
+.hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    color: #38bdf8;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
 }
 
-/* Sidebar Styling */
+/* Pulse Animation for Live Status */
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+@keyframes pulse-amber {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.pulse-indicator-live {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #10b981;
+    display: inline-block;
+    animation: pulse-green 2s infinite;
+}
+
+.pulse-indicator-amber {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #f59e0b;
+    display: inline-block;
+    animation: pulse-amber 2s infinite;
+}
+
+/* Sidebar Custom Styling */
 [data-testid="stSidebar"] {
-    background-color: #0d131f !important;
-    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-    padding-top: 1.2rem;
+    background-color: #0b111e !important;
+    border-right: 1px solid rgba(148, 163, 184, 0.12) !important;
+    padding-top: 1rem;
 }
 
 [data-testid="stSidebar"] hr {
     margin: 0.75rem 0 !important;
-    border-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(148, 163, 184, 0.1) !important;
 }
 
-/* Metric Card Styling (Fixing Truncation) */
+/* High-Impact Metric Cards (Fixes Truncation & Adds Visual Depth) */
 div[data-testid="stMetric"] {
-    background-color: #0f172a !important;
-    border: 1px solid rgba(148, 163, 184, 0.14) !important;
-    border-radius: 8px !important;
-    padding: 10px 14px !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25) !important;
-    min-height: 90px !important;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%) !important;
+    border: 1px solid rgba(148, 163, 184, 0.15) !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 4px 15px -2px rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: blur(8px) !important;
+    min-height: 88px !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+div[data-testid="stMetric"]:hover {
+    border-color: rgba(56, 189, 248, 0.4) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -4px rgba(6, 182, 212, 0.25) !important;
 }
 
 div[data-testid="stMetric"] label, div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
     color: #94a3b8 !important;
     font-size: 0.72rem !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+    letter-spacing: 0.06em !important;
 }
 
 div[data-testid="stMetric"] [data-testid="stMetricValue"], 
@@ -144,57 +192,21 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] > div {
     color: #64748b !important;
 }
 
-/* Badges & Pills */
-.sre-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 9px;
-    border-radius: 9999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    line-height: 1.2;
-}
-
-.pill-live {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.35);
-}
-
-.pill-amber {
-    background: rgba(245, 158, 11, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-}
-
-.pill-rose {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.35);
-}
-
-.pill-cyan {
-    background: rgba(6, 182, 212, 0.15);
-    color: #38bdf8;
-    border: 1px solid rgba(6, 182, 212, 0.35);
-}
-
-.pill-slate {
-    background: rgba(100, 116, 139, 0.15);
-    color: #94a3b8;
-    border: 1px solid rgba(100, 116, 139, 0.35);
-}
-
-/* Enterprise Surface Cards */
+/* Glassmorphic SRE Surface Cards */
 .sre-card {
-    background-color: #0f172a;
+    background: linear-gradient(180deg, rgba(21, 30, 46, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
     border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 14px 18px;
     margin-bottom: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease-in-out;
+}
+
+.sre-card:hover {
+    border-color: rgba(56, 189, 248, 0.35);
+    box-shadow: 0 6px 18px -3px rgba(6, 182, 212, 0.15);
 }
 
 .sre-card-header {
@@ -207,25 +219,89 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] > div {
     margin-bottom: 6px;
 }
 
-/* Callouts & Alert Banners */
+/* Pills & Micro-badges */
+.sre-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+}
+
+.pill-live {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.pill-amber {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.pill-rose {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.pill-cyan {
+    background: rgba(6, 182, 212, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(6, 182, 212, 0.35);
+}
+
+.pill-slate {
+    background: rgba(100, 116, 139, 0.12);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+/* High-Impact Comparison Cards */
+.comparison-container-off {
+    background: linear-gradient(180deg, rgba(239, 68, 68, 0.04) 0%, rgba(15, 23, 42, 0.8) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-left: 5px solid #ef4444;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 16px -2px rgba(239, 68, 68, 0.1);
+}
+
+.comparison-container-on {
+    background: linear-gradient(180deg, rgba(6, 182, 212, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%);
+    border: 1px solid rgba(6, 182, 212, 0.4);
+    border-left: 5px solid #06b6d4;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 20px -2px rgba(6, 182, 212, 0.2);
+}
+
+/* Callouts */
 .failed-fix-alert {
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px solid rgba(239, 68, 68, 0.28);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
     border-left: 4px solid #ef4444;
-    padding: 10px 14px;
-    margin: 8px 0;
-    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 10px 0;
+    border-radius: 6px;
     font-size: 0.88rem;
     color: #fca5a5;
 }
 
 .success-fix-box {
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.28);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
     border-left: 4px solid #10b981;
-    padding: 10px 14px;
-    margin: 8px 0;
-    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 10px 0;
+    border-radius: 6px;
     font-size: 0.88rem;
     color: #86efac;
 }
@@ -233,37 +309,40 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] > div {
 .memory-evidence-card {
     background: #090e18;
     border: 1px solid rgba(6, 182, 212, 0.25);
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
 }
 
-/* Status Banner */
+/* Modern Status Banner */
 .status-banner {
-    background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(148, 163, 184, 0.15);
+    background: linear-gradient(90deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.7) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.18);
     border-left: 4px solid #38bdf8;
-    padding: 10px 16px;
-    border-radius: 6px;
-    margin-bottom: 1rem;
-    font-size: 0.85rem;
+    padding: 12px 18px;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    font-size: 0.86rem;
     color: #cbd5e1;
+    backdrop-filter: blur(8px);
 }
 
-/* Button & Input Styling */
+/* Sleek Buttons */
 div.stButton > button:first-child {
     background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
     color: #ffffff;
     font-weight: 600;
     border: none;
-    border-radius: 6px;
-    padding: 6px 16px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    border-radius: 7px;
+    padding: 7px 18px;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease-in-out;
 }
 
 div.stButton > button:first-child:hover {
     background: linear-gradient(180deg, #0369a1 0%, #075985 100%);
-    border: none;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+    transform: translateY(-1px);
 }
 </style>
 """
@@ -286,7 +365,7 @@ llm_engine = get_llm_engine()
 # ------------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🛡️ **OPSRECALL**")
-    st.caption("Change-Aware Operational Memory for SREs")
+    st.markdown('<div class="hero-tag">SRE Operational Memory</div>', unsafe_allow_html=True)
     st.markdown("---")
 
     # Live Hindsight Connection Status Check
@@ -298,16 +377,16 @@ with st.sidebar:
     groq_health = llm_engine.check_health()
     groq_status = groq_health.get("status")
 
-    # Render Refined Status Badges
+    # Render Refined Status Badges with Pulsing Dot
     if hs_status == "CONNECTED":
         st.markdown(
-            f'<div class="sre-pill pill-live">● HINDSIGHT CLOUD LIVE</div>',
+            '<div class="sre-pill pill-live"><span class="pulse-indicator-live"></span> HINDSIGHT LIVE</div>',
             unsafe_allow_html=True,
         )
         st.caption(f"Bank: `{hs_health.get('bank_id')}`")
     elif hs_status == "NOT_CONFIGURED":
         st.markdown(
-            '<div class="sre-pill pill-amber">● OFFLINE SIMULATION MODE</div>',
+            '<div class="sre-pill pill-amber"><span class="pulse-indicator-amber"></span> OFFLINE SIMULATION</div>',
             unsafe_allow_html=True,
         )
         st.caption("Memory: Local SRE Postmortem Cache")
@@ -325,7 +404,7 @@ with st.sidebar:
         )
     else:
         st.markdown(
-            '<div class="sre-pill pill-slate">● GROQ: OFFLINE SRE EXPERT</div>',
+            '<div class="sre-pill pill-slate">● GROQ: OFFLINE EXPERT</div>',
             unsafe_allow_html=True,
         )
 
@@ -366,13 +445,14 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("v1.0.0 Enterprise SRE Edition")
-    st.caption("Advisory Operational Safety Guardrails")
+    st.caption("Advisory Safety Guardrails")
 
 
 # ==============================================================================
 # SECTION 1: COMMAND CENTER
 # ==============================================================================
 if selected_page == "Command Center":
+    st.markdown('<div class="hero-tag">⚡ Operational Command Center</div>', unsafe_allow_html=True)
     st.title("⚡ Operational Command Center")
     st.markdown("Real-time operational status, memory bank metrics, and active incident telemetry.")
 
@@ -380,7 +460,7 @@ if selected_page == "Command Center":
     sev1_count = sum(1 for i in all_incidents if i.severity == "SEV-1")
     eval_count = len(list(settings.OUTPUTS_DIR.glob("*.json")))
 
-    # Modern Custom KPI Bar (Non-Truncating Streamlit Metrics)
+    # Modern Custom KPI Bar (No Truncation)
     mode_label = "LIVE CLOUD" if hs_status == "CONNECTED" else "OFFLINE PREVIEW"
     mode_sub = "Hindsight Bank Active" if hs_status == "CONNECTED" else "Simulated Memory Active"
 
@@ -402,7 +482,7 @@ if selected_page == "Command Center":
             f"""
             <div class="status-banner">
                 <strong>ℹ️ Operating in Offline Simulation Mode</strong>: 
-                <code>HINDSIGHT_API_KEY</code> is not set. All investigation workflows, side-by-side memory comparisons, 
+                <code>HINDSIGHT_API_KEY</code> is not configured. All investigation workflows, side-by-side comparisons, 
                 and the 12-case evaluation benchmark operate deterministically from local SRE postmortem caches. 
                 To switch to live cloud memory, configure your key in <code>.env</code> and click <em>Reload Config</em> in the sidebar.
             </div>
@@ -493,6 +573,7 @@ if selected_page == "Command Center":
 # SECTION 2: INCIDENT CONSOLE
 # ==============================================================================
 elif selected_page == "Incident Console":
+    st.markdown('<div class="hero-tag">🚨 Telemetry Console</div>', unsafe_allow_html=True)
     st.title("🚨 Incident Telemetry Console")
     st.markdown("Ingest, inspect, and configure operational incident telemetry.")
 
@@ -616,6 +697,7 @@ elif selected_page == "Incident Console":
 # SECTION 3: AI INVESTIGATION & SIDE-BY-SIDE COMPARISON
 # ==============================================================================
 elif selected_page == "AI Investigation & Comparison":
+    st.markdown('<div class="hero-tag">🔬 Side-by-Side Verification</div>', unsafe_allow_html=True)
     st.title("🔬 AI Incident Investigation & Comparison")
     st.markdown(
         "Demonstrate the power of **Change-Aware Operational Memory** by comparing "
@@ -660,12 +742,12 @@ elif selected_page == "AI Investigation & Comparison":
         with col_off:
             st.markdown(
                 """
-                <div class="sre-card" style="border-left: 4px solid #64748b; background: #0b1120;">
+                <div class="comparison-container-off">
                     <div class="sre-card-header">
-                        <span style="color: #94a3b8;">WITHOUT Hindsight Memory</span>
+                        <span style="color: #f87171; font-weight: 700;">WITHOUT Hindsight Memory</span>
                         <span class="sre-pill pill-slate">❌ UNASSISTED BASELINE</span>
                     </div>
-                    <div style="font-size: 0.8rem; color: #94a3b8;">
+                    <div style="font-size: 0.82rem; color: #cbd5e1; margin-top: 4px;">
                         Standard LLM reasoning: Raw telemetry only. No historical postmortem awareness.
                     </div>
                 </div>
@@ -691,7 +773,7 @@ elif selected_page == "AI Investigation & Comparison":
                 st.markdown(
                     """
                     <div class="failed-fix-alert">
-                        <strong>⚠️ Historical Blind Spot:</strong> No historical failed mitigations recalled.
+                        <strong>⚠️ CRITICAL BLIND SPOT:</strong> Zero historical failed mitigations recalled.
                         The on-call engineer risks repeating previously failed fixes (e.g. increasing client timeouts)!
                     </div>
                     """,
@@ -704,12 +786,12 @@ elif selected_page == "AI Investigation & Comparison":
         with col_on:
             st.markdown(
                 """
-                <div class="sre-card" style="border-left: 4px solid #06b6d4; background: linear-gradient(180deg, rgba(6,182,212,0.12) 0%, rgba(15,23,42,0.7) 100%);">
+                <div class="comparison-container-on">
                     <div class="sre-card-header">
-                        <span style="color: #38bdf8;">WITH Hindsight Memory</span>
+                        <span style="color: #38bdf8; font-weight: 700;">WITH Hindsight Memory</span>
                         <span class="sre-pill pill-cyan">🧠 HINDSIGHT AUGMENTED</span>
                     </div>
-                    <div style="font-size: 0.8rem; color: #94a3b8;">
+                    <div style="font-size: 0.82rem; color: #cbd5e1; margin-top: 4px;">
                         Persistent Operational Memory: Recalls verified causes, change correlation, and past failed fixes.
                     </div>
                 </div>
@@ -732,7 +814,7 @@ elif selected_page == "AI Investigation & Comparison":
                     st.markdown(
                         f"""
                         <div class="failed-fix-alert">
-                            <strong>🚫 DO NOT REPEAT:</strong> {fa.approach}<br>
+                            <strong>🚫 DO NOT REPEAT FAILED MITIGATION:</strong> {fa.approach}<br>
                             <small>Why: {fa.why_failed} (Source: {fa.historical_source_incident})</small>
                         </div>
                         """,
@@ -774,7 +856,7 @@ elif selected_page == "AI Investigation & Comparison":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Historical Precedent Attributed</div>
-                    <div class="sre-kpi-value kpi-live">{len(res_enabled.historical_incidents_referenced)} Precedent</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{len(res_enabled.historical_incidents_referenced)} Precedent</div>
                     <div class="sre-kpi-sub">Baseline: 0 precedents cited</div>
                 </div>
                 """,
@@ -785,7 +867,7 @@ elif selected_page == "AI Investigation & Comparison":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Costly Failed Fixes Blocked</div>
-                    <div class="sre-kpi-value kpi-rose">{len(res_enabled.previous_failed_approaches)} Flagged</div>
+                    <div class="sre-kpi-value" style="color: #f87171;">{len(res_enabled.previous_failed_approaches)} Flagged</div>
                     <div class="sre-kpi-sub">Avoids thread starvation repetition</div>
                 </div>
                 """,
@@ -796,7 +878,7 @@ elif selected_page == "AI Investigation & Comparison":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Diagnosis Confidence</div>
-                    <div class="sre-kpi-value kpi-cyan">{res_enabled.confidence_level}</div>
+                    <div class="sre-kpi-value" style="color: #38bdf8;">{res_enabled.confidence_level}</div>
                     <div class="sre-kpi-sub">Baseline: {res_disabled.confidence_level}</div>
                 </div>
                 """,
@@ -808,6 +890,7 @@ elif selected_page == "AI Investigation & Comparison":
 # SECTION 4: MEMORY EXPLORER
 # ==============================================================================
 elif selected_page == "Memory Explorer":
+    st.markdown('<div class="hero-tag">🧠 TEMPR Engine</div>', unsafe_allow_html=True)
     st.title("🧠 Hindsight Memory Explorer")
     st.markdown("Directly inspect, query, and analyze memories in the Hindsight Cloud memory bank.")
 
@@ -896,6 +979,7 @@ elif selected_page == "Memory Explorer":
 # SECTION 5: LEARNING CENTER
 # ==============================================================================
 elif selected_page == "Learning Center":
+    st.markdown('<div class="hero-tag">✍️ Continuous Feedback</div>', unsafe_allow_html=True)
     st.title("✍️ Incident Learning Center")
     st.markdown(
         "Capture human-verified incident resolutions. "
@@ -989,6 +1073,7 @@ elif selected_page == "Learning Center":
 # SECTION 6: EVALUATION LAB
 # ==============================================================================
 elif selected_page == "Evaluation Lab":
+    st.markdown('<div class="hero-tag">📈 Rigorous Benchmark</div>', unsafe_allow_html=True)
     st.title("📈 Reproducible Evaluation Lab")
     st.markdown(
         "Measure the concrete difference persistent operational memory makes across "
@@ -1029,7 +1114,7 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Top-1 Root Cause Accuracy</div>
-                    <div class="sre-kpi-value kpi-live">{acc_top1.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{acc_top1.get('memory_enabled', 0)}%</div>
                     <div class="sre-kpi-sub">+{acc_top1.get('memory_enabled', 0) - acc_top1.get('memory_disabled', 0):.1f}% vs Memory OFF</div>
                 </div>
                 """,
@@ -1040,7 +1125,7 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Failed Fix Avoidance</div>
-                    <div class="sre-kpi-value kpi-live">{avoid.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{avoid.get('memory_enabled', 0)}%</div>
                     <div class="sre-kpi-sub">100% Pitfalls Flagged</div>
                 </div>
                 """,
@@ -1051,7 +1136,7 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Relevance Retrieval</div>
-                    <div class="sre-kpi-value kpi-cyan">{retrieval.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-value" style="color: #38bdf8;">{retrieval.get('memory_enabled', 0)}%</div>
                     <div class="sre-kpi-sub">+{retrieval.get('memory_enabled', 0) - retrieval.get('memory_disabled', 0):.1f}% vs Memory OFF</div>
                 </div>
                 """,
@@ -1063,7 +1148,7 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Composite Score (/100)</div>
-                    <div class="sre-kpi-value kpi-live">{composite.get('memory_enabled', 0)}</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{composite.get('memory_enabled', 0)}</div>
                     <div class="sre-kpi-sub">+{delta_comp:.1f} pts (+25.0 recurrent)</div>
                 </div>
                 """,
@@ -1098,12 +1183,12 @@ elif selected_page == "Evaluation Lab":
                 color_discrete_map={"Memory OFF (Baseline)": "#475569", "Memory ON (OPSRECALL)": "#06b6d4"},
             )
             fig.update_layout(
-                plot_bgcolor="#080c14",
-                paper_bgcolor="#080c14",
+                plot_bgcolor="rgba(8, 12, 20, 0.6)",
+                paper_bgcolor="rgba(8, 12, 20, 0.6)",
                 font_color="#e2e8f0",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(gridcolor="#1e293b"),
-                yaxis=dict(gridcolor="#1e293b", range=[0, 110]),
+                xaxis=dict(gridcolor="rgba(148, 163, 184, 0.1)"),
+                yaxis=dict(gridcolor="rgba(148, 163, 184, 0.1)", range=[0, 110]),
                 margin=dict(l=20, r=20, t=50, b=20),
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -1138,6 +1223,7 @@ elif selected_page == "Evaluation Lab":
 # SECTION 7: ARCHITECTURE & ABOUT
 # ==============================================================================
 elif selected_page == "Architecture & About":
+    st.markdown('<div class="hero-tag">🏛️ System Architecture</div>', unsafe_allow_html=True)
     st.title("🏛️ Architecture & Technology")
     st.markdown(
         "OPSRECALL decouples **Persistent Operational Memory** (Hindsight) from **Reasoning** (Groq)."
