@@ -25,7 +25,9 @@ def main() -> int:
     print("OPSRECALL — INCIDENT DATASET SEEDING")
     print("==================================================")
     print(f"Target Hindsight Bank: {settings.HINDSIGHT_BANK_ID}")
-    print(f"Hindsight Live Config: {'Configured' if settings.is_hindsight_configured() else 'Unconfigured (Offline Cache Only)'}")
+    print(
+        f"Hindsight Live Config: {'Configured' if settings.is_hindsight_configured() else 'Unconfigured (Offline Cache Only)'}"
+    )
     print("--------------------------------------------------")
 
     engine = get_incident_engine()
@@ -57,7 +59,9 @@ def main() -> int:
 
     print("==================================================")
     if settings.is_hindsight_configured():
-        print(f"[SUCCESS] {retained_count}/{len(incidents)} incidents successfully retained in Hindsight memory bank '{settings.HINDSIGHT_BANK_ID}'.")
+        print(
+            f"[SUCCESS] {retained_count}/{len(incidents)} incidents successfully retained in Hindsight memory bank '{settings.HINDSIGHT_BANK_ID}'."
+        )
     else:
         print(f"[INFO] {len(incidents)} incidents verified in local SQLite database.")
         print("       Configure HINDSIGHT_API_KEY in .env to sync directly to Hindsight Cloud.")
@@ -67,4 +71,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from config import settings
 from core.validators import Incident
 from database.db import get_db
@@ -17,7 +18,7 @@ from database.db import get_db
 class IncidentEngine:
     """Manages synthetic incident repository and operational incident ingestion."""
 
-    def __init__(self, incidents_path: Optional[Path] = None):
+    def __init__(self, incidents_path: Path | None = None):
         self.incidents_path = incidents_path or settings.INCIDENTS_PATH
         self.db = get_db()
         self._ensure_dataset_loaded()
@@ -28,7 +29,7 @@ class IncidentEngine:
             return
 
         try:
-            with open(self.incidents_path, "r", encoding="utf-8") as f:
+            with open(self.incidents_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             for item in data:
@@ -38,7 +39,7 @@ class IncidentEngine:
         except Exception as e:
             print(f"[IncidentEngine] Warning: Failed to preload incidents: {e}")
 
-    def get_all_incidents(self) -> List[Incident]:
+    def get_all_incidents(self) -> list[Incident]:
         """Retrieve all incidents currently stored in the system."""
         incidents = self.db.list_incidents()
         if not incidents and self.incidents_path.exists():
@@ -46,7 +47,7 @@ class IncidentEngine:
             incidents = self.db.list_incidents()
         return incidents
 
-    def get_incident(self, incident_id: str) -> Optional[Incident]:
+    def get_incident(self, incident_id: str) -> Incident | None:
         """Fetch a single incident by ID."""
         return self.db.get_incident(incident_id)
 
@@ -54,10 +55,10 @@ class IncidentEngine:
         """Validate and persist an incident."""
         self.db.upsert_incident(incident)
 
-    def get_service_health_summary(self) -> List[Dict[str, Any]]:
+    def get_service_health_summary(self) -> list[dict[str, Any]]:
         """Compute service status summary from stored incidents."""
         incidents = self.get_all_incidents()
-        services: Dict[str, Dict[str, Any]] = {}
+        services: dict[str, dict[str, Any]] = {}
 
         for inc in incidents:
             svc = inc.affected_service
@@ -76,7 +77,7 @@ class IncidentEngine:
         return list(services.values())
 
 
-_incident_engine_instance: Optional[IncidentEngine] = None
+_incident_engine_instance: IncidentEngine | None = None
 
 
 def get_incident_engine() -> IncidentEngine:
@@ -85,4 +86,3 @@ def get_incident_engine() -> IncidentEngine:
     if _incident_engine_instance is None:
         _incident_engine_instance = IncidentEngine()
     return _incident_engine_instance
-

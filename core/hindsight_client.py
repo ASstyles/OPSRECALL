@@ -9,22 +9,22 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
-from config import settings
+from typing import Any
 
 # Official Hindsight Client and Models
 from hindsight_client import (
     Hindsight,
     RecallResponse,
-    RecallResult,
-    RetainResponse,
     ReflectResponse,
+    RetainResponse,
 )
 from hindsight_client_api.exceptions import (
     ApiException,
     NotFoundException,
     UnauthorizedException,
 )
+
+from config import settings
 
 logger = logging.getLogger("opsrecall.hindsight")
 
@@ -34,16 +34,16 @@ class HindsightClientWrapper:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        bank_id: Optional[str] = None,
-        test_bank_id: Optional[str] = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        bank_id: str | None = None,
+        test_bank_id: str | None = None,
     ):
         self._explicit_base_url = base_url
         self._explicit_api_key = api_key
         self._explicit_bank_id = bank_id
         self._explicit_test_bank_id = test_bank_id
-        self._client: Optional[Hindsight] = None
+        self._client: Hindsight | None = None
 
     @property
     def base_url(self) -> str:
@@ -66,7 +66,11 @@ class HindsightClientWrapper:
     def is_configured(self) -> bool:
         """Check whether genuine Hindsight API credentials are provided."""
         if self._explicit_api_key is not None:
-            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5 and not self._explicit_api_key.lower().startswith("your_"))
+            return bool(
+                self._explicit_api_key
+                and len(self._explicit_api_key) > 5
+                and not self._explicit_api_key.lower().startswith("your_")
+            )
         return settings.is_hindsight_configured()
 
     def reset(self) -> None:
@@ -76,9 +80,7 @@ class HindsightClientWrapper:
     def get_client(self) -> Hindsight:
         """Retrieve client or initialize if credentials now exist."""
         if not self.is_configured:
-            raise RuntimeError(
-                "Hindsight client is not configured. Please set HINDSIGHT_API_KEY in your .env file."
-            )
+            raise RuntimeError("Hindsight client is not configured. Please set HINDSIGHT_API_KEY in your .env file.")
         if self._client is None:
             try:
                 self._client = Hindsight(
@@ -93,7 +95,7 @@ class HindsightClientWrapper:
                 raise
         return self._client
 
-    def check_health(self) -> Dict[str, Any]:
+    def check_health(self) -> dict[str, Any]:
         """Perform a genuine health check with roundtrip latency against Hindsight Cloud."""
         if not self.is_configured:
             env_file = settings.get_env_file_path()
@@ -192,7 +194,7 @@ class HindsightClientWrapper:
                 "message": f"Could not reach Hindsight server at {self.base_url}: {ex}",
             }
 
-    def ensure_bank_exists(self, bank_id: Optional[str] = None) -> bool:
+    def ensure_bank_exists(self, bank_id: str | None = None) -> bool:
         """Ensure the target memory bank exists; create it if missing."""
         target_bank = bank_id or self.bank_id
         client = self.get_client()
@@ -213,7 +215,7 @@ class HindsightClientWrapper:
     def wait_for_document_processing(
         self,
         document_id: str,
-        bank_id: Optional[str] = None,
+        bank_id: str | None = None,
         timeout_seconds: float = 15.0,
         poll_interval: float = 1.5,
     ) -> bool:
@@ -249,11 +251,11 @@ class HindsightClientWrapper:
     def retain(
         self,
         content: str,
-        document_id: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None,
-        tags: Optional[List[str]] = None,
-        timestamp: Optional[str] = None,
-        bank_id: Optional[str] = None,
+        document_id: str | None = None,
+        metadata: dict[str, str] | None = None,
+        tags: list[str] | None = None,
+        timestamp: str | None = None,
+        bank_id: str | None = None,
         retain_async: bool = False,
     ) -> RetainResponse:
         """Store incident experience into Hindsight memory bank."""
@@ -279,16 +281,16 @@ class HindsightClientWrapper:
         query: str,
         max_tokens: int = 4096,
         budget: str = "mid",
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         tags_match: str = "any",
-        bank_id: Optional[str] = None,
+        bank_id: str | None = None,
     ) -> RecallResponse:
         """Recall relevant historical operational memories via semantic & TEMPR search."""
         client = self.get_client()
         target_bank = bank_id or self.bank_id
 
         # Pass supported arguments to official SDK recall
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "bank_id": target_bank,
             "query": query,
             "max_tokens": max_tokens,
@@ -305,8 +307,8 @@ class HindsightClientWrapper:
         self,
         query: str,
         budget: str = "mid",
-        context: Optional[str] = None,
-        bank_id: Optional[str] = None,
+        context: str | None = None,
+        bank_id: str | None = None,
     ) -> ReflectResponse:
         """Generate high-level operational reflections and recurring pattern analyses."""
         client = self.get_client()
@@ -321,7 +323,7 @@ class HindsightClientWrapper:
         return response
 
 
-_hindsight_wrapper_instance: Optional[HindsightClientWrapper] = None
+_hindsight_wrapper_instance: HindsightClientWrapper | None = None
 
 
 def get_hindsight_client(force_reload: bool = False) -> HindsightClientWrapper:

@@ -4,11 +4,9 @@ Validates secret masking, prompt injection isolation, untrusted log sanitization
 destructive command prevention, and ground-truth anti-leakage isolation.
 """
 
-import pytest
 from config import mask_secret
 from core.evaluation import UNSAFE_COMMAND_PATTERNS
 from core.llm_engine import LLMEngine
-from core.validators import ActionRecommendation, Incident, InvestigationResult
 
 
 def test_mask_secret_protects_credentials():
@@ -79,6 +77,7 @@ def test_unsafe_remediation_commands_are_prevented():
     ]
 
     import re
+
     for cmd in destructive_commands:
         matches = any(re.search(pat, cmd, re.IGNORECASE) for pat in UNSAFE_COMMAND_PATTERNS)
         assert matches is True, f"Failed to detect destructive command: {cmd}"
@@ -101,4 +100,3 @@ def test_read_only_advisory_default():
     assert result.requires_human_intervention is True
     for action in result.recommended_remediation_steps:
         assert action.requires_human_approval is True
-

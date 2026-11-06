@@ -6,11 +6,12 @@ Automatically and transparently skipped if external credentials are not present.
 """
 
 import uuid
+
 import pytest
+
 from config import settings
 from core.hindsight_client import HindsightClientWrapper, get_hindsight_client
 from core.llm_engine import get_llm_engine
-from core.memory_manager import get_memory_manager
 
 
 @pytest.mark.skipif(
@@ -40,34 +41,38 @@ def test_live_hindsight_retain_recall_and_persistence():
 
     run_token = uuid.uuid4().hex[:6].upper()
     doc_id = f"TEST-INC-PYTEST-{run_token}"
-    content = f"Pytest live memory test incident {doc_id} on live-test-svc. Token: {run_token}."
+    content = (
+        f"Pytest live memory test incident on live-test-svc: connection pool timeout on checkout DB. "
+        f"Unique verification probe token: {run_token}."
+    )
 
     # 1. Retain
     resp = client.retain(
         content=content,
         document_id=doc_id,
         metadata={"run_token": run_token},
-        tags=["pytest-live", doc_id],
+        tags=["pytest-live", "live-test-svc"],
         bank_id=test_bank,
     )
     assert getattr(resp, "success", False) is True
 
     # 2. Bounded Polling
-    client.wait_for_document_processing(
+    indexed = client.wait_for_document_processing(
         document_id=doc_id,
         bank_id=test_bank,
-        timeout_seconds=10.0,
+        timeout_seconds=20.0,
         poll_interval=1.5,
     )
+    assert indexed is True, f"Document {doc_id} was not indexed within bounded timeout."
 
-    # 3. Recall in Fresh Session
+    # 3. Recall in Fresh Session (WITHOUT leaking probe token or doc_id into query)
     fresh_client = HindsightClientWrapper(
         base_url=client.base_url,
         api_key=client.api_key,
         bank_id=test_bank,
     )
     recall_resp = fresh_client.recall(
-        query=f"verification incident {doc_id} with token {run_token}",
+        query="live-test-svc connection pool timeout on checkout DB",
         bank_id=test_bank,
     )
     results = getattr(recall_resp, "results", [])
@@ -75,11 +80,8 @@ def test_live_hindsight_retain_recall_and_persistence():
         f"Live Hindsight recall must return non-empty results for retained probe incident {doc_id}."
     )
 
-    # Assert exact probe document ID or unique token is recovered
-    found = any(
-        doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "")
-        for r in results
-    )
+    # Assert exact probe document ID or unique token is recovered from recalled content
+    found = any(doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "") for r in results)
     assert found, (
         f"Retained probe document {doc_id} or unique token {run_token} was not found in recall results: {results}"
     )
@@ -90,13 +92,8 @@ def test_live_hindsight_retain_recall_and_persistence():
         bank_id=test_bank,
     )
     neg_results = getattr(negative_resp, "results", [])
-    neg_found = any(
-        doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "")
-        for r in neg_results
-    )
-    assert not neg_found, (
-        f"Probe document {doc_id} leaked into unrelated negative control query results!"
-    )
+    neg_found = any(doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "") for r in neg_results)
+    assert not neg_found, f"Probe document {doc_id} leaked into unrelated negative control query results!"
 
 
 @pytest.mark.skipif(

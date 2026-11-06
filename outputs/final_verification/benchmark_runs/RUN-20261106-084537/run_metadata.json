@@ -1,0 +1,11 @@
+{
+  "run_id": "RUN-20261106-084537",
+  "run_timestamp": "2026-11-06T08:45:37.021382+00:00",
+  "cases_evaluated": 16,
+  "model_configured": "openai/gpt-oss-120b",
+  "hindsight_bank": "opsrecall-demo",
+  "hindsight_status": "OFFLINE_PREVIEW",
+  "evaluation_standard": "OPSRECALL-16D-SCIENTIFIC-BENCHMARK",
+  "composite_score_memory_enabled": 91.0625,
+  "composite_score_memory_disabled": 79.625
+}

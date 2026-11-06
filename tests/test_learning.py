@@ -3,10 +3,10 @@ Unit tests for Learning Engine, resolution retention, multi-stage statuses, and 
 """
 
 from unittest.mock import MagicMock
+
 import pytest
+
 from core.learning_engine import LearningEngine
-from core.memory_manager import MemoryManager
-from database.db import DatabaseManager
 
 
 def test_confirm_and_retain_resolution_live_mocked():

@@ -6,18 +6,13 @@ Enterprise SRE Incident Command & Investigation Console.
 
 from __future__ import annotations
 
-import json
-import time
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
-from config import mask_secret, settings
+from config import settings
 from core.evaluation import get_evaluation_framework
 from core.hindsight_client import get_hindsight_client
 from core.incident_engine import get_incident_engine
@@ -25,7 +20,6 @@ from core.investigation import get_investigation_engine
 from core.learning_engine import get_learning_engine
 from core.llm_engine import get_llm_engine
 from core.memory_manager import get_memory_manager
-from core.validators import Incident
 from database.db import get_db
 
 # ------------------------------------------------------------------------------
@@ -174,7 +168,7 @@ div[data-testid="stMetric"] label, div[data-testid="stMetric"] [data-testid="stM
     letter-spacing: 0.06em !important;
 }
 
-div[data-testid="stMetric"] [data-testid="stMetricValue"], 
+div[data-testid="stMetric"] [data-testid="stMetricValue"],
 div[data-testid="stMetric"] [data-testid="stMetricValue"] > div {
     color: #38bdf8 !important;
     font-size: 1.15rem !important;
@@ -479,11 +473,11 @@ if selected_page == "Command Center":
     # Clear Operational Status Banner
     if hs_status == "NOT_CONFIGURED":
         st.markdown(
-            f"""
+            """
             <div class="status-banner">
-                <strong>ℹ️ Operating in Offline Simulation Mode</strong>: 
-                <code>HINDSIGHT_API_KEY</code> is not configured. All investigation workflows, side-by-side comparisons, 
-                and the 12-case evaluation benchmark operate deterministically from local SRE postmortem caches. 
+                <strong>[SIMULATION] Operating in Offline Simulation Mode</strong>:
+                <code>HINDSIGHT_API_KEY</code> is not configured. All investigation workflows, side-by-side comparisons,
+                and the 16-case evaluation benchmark operate deterministically from local SRE postmortem caches.
                 To switch to live cloud memory, configure your key in <code>.env</code> and click <em>Reload Config</em> in the sidebar.
             </div>
             """,
@@ -493,7 +487,7 @@ if selected_page == "Command Center":
         st.markdown(
             f"""
             <div class="status-banner" style="border-left-color: #10b981;">
-                <strong>✅ Connected to Hindsight Cloud</strong>: Memory bank <code>{settings.HINDSIGHT_BANK_ID}</code> 
+                <strong>✅ Connected to Hindsight Cloud</strong>: Memory bank <code>{settings.HINDSIGHT_BANK_ID}</code>
                 is online. Retain, recall, and reflect primitives are operating live with TEMPR neural indexing.
             </div>
             """,
@@ -560,7 +554,7 @@ if selected_page == "Command Center":
                             {inc.incident_title}
                         </div>
                         <div style="font-size: 0.78rem; color: #94a3b8; display: flex; justify-content: space-between;">
-                            <span>Change: <code>{inc.deployment_id or 'Config Drift'}</code></span>
+                            <span>Change: <code>{inc.deployment_id or "Config Drift"}</code></span>
                             <span style="color: #64748b;">{inc.incident_timestamp[:10]}</span>
                         </div>
                     </div>
@@ -579,11 +573,11 @@ elif selected_page == "Incident Console":
 
     all_incidents = incident_engine.get_all_incidents()
     inc_options = [f"{i.incident_id} — {i.incident_title} ({i.affected_service})" for i in all_incidents]
-    inc_options.append("➕ Create Custom Incident Scenario")
+    inc_options.append("[+] Create Custom Incident Scenario")
 
     selected_choice = st.selectbox("Select Incident Scenario", inc_options)
 
-    if selected_choice.startswith("➕"):
+    if selected_choice.startswith("[+]"):
         st.subheader("Define Custom Incident Scenario")
         c1, c2 = st.columns(2)
         with c1:
@@ -595,7 +589,9 @@ elif selected_page == "Incident Console":
             c_dep = st.text_input("Recent Deployment ID", value="DEP-9999")
             c_change = st.text_area("Deployment / Config Change Details", value="Updated container resource limits")
 
-        c_symptoms = st.text_area("Symptoms (one per line)", value="P99 latency surged to 5000ms\nError rate spiked to 12%")
+        c_symptoms = st.text_area(
+            "Symptoms (one per line)", value="P99 latency surged to 5000ms\nError rate spiked to 12%"
+        )
         c_logs = st.text_area("Error Logs (one per line)", value="ERROR client timeout after 30000ms")
 
         incident_to_inspect = {
@@ -604,7 +600,7 @@ elif selected_page == "Incident Console":
             "affected_service": c_svc,
             "severity": c_sev,
             "symptoms": [s.strip() for s in c_symptoms.split("\n") if s.strip()],
-            "error_logs": [l.strip() for l in c_logs.split("\n") if l.strip()],
+            "error_logs": [log_line.strip() for log_line in c_logs.split("\n") if log_line.strip()],
             "deployment_id": c_dep,
             "deployment_or_change": c_change,
             "metrics": {"p99_latency_ms": 5000, "error_rate_pct": 12.0},
@@ -625,7 +621,7 @@ elif selected_page == "Incident Console":
             f"""
             <div class="sre-card" style="padding: 10px 14px;">
                 <div class="sre-kpi-label">Affected Service</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">{incident_to_inspect.get('affected_service')}</div>
+                <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">{incident_to_inspect.get("affected_service")}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -647,7 +643,7 @@ elif selected_page == "Incident Console":
             f"""
             <div class="sre-card" style="padding: 10px 14px;">
                 <div class="sre-kpi-label">Change Reference</div>
-                <div style="font-size: 1.1rem; font-weight: 700; color: #e2e8f0;">{incident_to_inspect.get('deployment_id') or 'Config Drift'}</div>
+                <div style="font-size: 1.1rem; font-weight: 700; color: #e2e8f0;">{incident_to_inspect.get("deployment_id") or "Config Drift"}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -690,7 +686,9 @@ elif selected_page == "Incident Console":
     st.markdown("---")
     if st.button("🚀 Send to AI Investigation Engine", type="primary"):
         st.session_state["active_incident"] = incident_to_inspect
-        st.success("Incident telemetry routed to AI Investigation Engine! Switch to 'AI Investigation & Comparison' in sidebar.")
+        st.success(
+            "Incident telemetry routed to AI Investigation Engine! Switch to 'AI Investigation & Comparison' in sidebar."
+        )
 
 
 # ==============================================================================
@@ -804,7 +802,11 @@ elif selected_page == "AI Investigation & Comparison":
 
             st.markdown("#### 🎯 Hypotheses (Memory Enabled)")
             for h in res_enabled.hypotheses:
-                prec_badge = f"<span class='sre-pill pill-cyan'>Precedent: {h.historical_precedent}</span>" if h.historical_precedent else ""
+                prec_badge = (
+                    f"<span class='sre-pill pill-cyan'>Precedent: {h.historical_precedent}</span>"
+                    if h.historical_precedent
+                    else ""
+                )
                 st.markdown(f"**{h.rank}. {h.hypothesis}** {prec_badge}", unsafe_allow_html=True)
                 st.caption(f"Likelihood: {h.likelihood} | Evidence: {', '.join(h.supporting_evidence)}")
 
@@ -840,17 +842,23 @@ elif selected_page == "AI Investigation & Comparison":
                     unsafe_allow_html=True,
                 )
 
-            with st.expander(f"📚 Recalled Hindsight Memories & Provenance ({len(res_enabled.structured_retrievals or res_enabled.recalled_memories)} retrieved)"):
+            with st.expander(
+                f"📚 Recalled Hindsight Memories & Provenance ({len(res_enabled.structured_retrievals or res_enabled.recalled_memories)} retrieved)"
+            ):
                 if res_enabled.structured_retrievals:
                     for sr in res_enabled.structured_retrievals:
-                        v_badge = '<span class="sre-pill pill-live">HUMAN-VERIFIED</span>' if sr.is_verified else '<span class="sre-pill pill-slate">UNVERIFIED</span>'
+                        v_badge = (
+                            '<span class="sre-pill pill-live">HUMAN-VERIFIED</span>'
+                            if sr.is_verified
+                            else '<span class="sre-pill pill-slate">UNVERIFIED</span>'
+                        )
                         st.markdown(
                             f"""
                             <div class="memory-evidence-card">
                                 <strong>{sr.incident_id} — {sr.title}</strong> {v_badge}<br>
-                                <span style="font-size: 0.78rem; color: #38bdf8;">Relevance Score: {sr.relevance_score or 'N/A'} | Service: {sr.service}</span><br>
+                                <span style="font-size: 0.78rem; color: #38bdf8;">Relevance Score: {sr.relevance_score or "N/A"} | Service: {sr.service}</span><br>
                                 <div style="font-size: 0.84rem; margin-top: 4px; color: #cbd5e1;"><strong>Why Retrieved:</strong> {sr.why_retrieved}</div>
-                                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;"><strong>Matching Evidence:</strong> {', '.join(sr.matching_evidence) if sr.matching_evidence else 'General symptom overlap'}</div>
+                                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;"><strong>Matching Evidence:</strong> {", ".join(sr.matching_evidence) if sr.matching_evidence else "General symptom overlap"}</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
@@ -923,7 +931,7 @@ elif selected_page == "Memory Explorer":
                 <span class="sre-pill {status_pill}">{hs_status}</span>
             </div>
             <div style="font-size: 0.82rem; color: #94a3b8;">
-                Base URL: <code>{settings.HINDSIGHT_BASE_URL}</code> | 
+                Base URL: <code>{settings.HINDSIGHT_BASE_URL}</code> |
                 Retrieval Engine: <strong>TEMPR (Semantic + Keyword + Entity + Temporal)</strong>
             </div>
         </div>
@@ -946,7 +954,9 @@ elif selected_page == "Memory Explorer":
             memories = memory_manager.recall_memories(query=query_text)
 
         if not memories and not hindsight_client.is_configured:
-            st.info("Operating in Offline Preview: Showing simulated operational postmortem memories matching your query.")
+            st.info(
+                "Operating in Offline Preview: Showing simulated operational postmortem memories matching your query."
+            )
             memories = investigation_engine._get_offline_preview_memories(
                 service="checkout-api",
                 symptoms=["504 gateway timeout"],
@@ -963,11 +973,11 @@ elif selected_page == "Memory Explorer":
                     f"""
                     <div class="sre-card">
                         <div class="sre-card-header">
-                            <span>#{idx} — <strong>{m.source_incident_id or m.document_id or 'Operational Experience'}</strong></span>
+                            <span>#{idx} — <strong>{m.source_incident_id or m.document_id or "Operational Experience"}</strong></span>
                             <span class="sre-pill pill-cyan">{relevance_str}</span>
                         </div>
                         <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">
-                            Tags: <code>{', '.join(m.tags) if m.tags else 'incident-experience'}</code> | Type: <em>{m.memory_type}</em>
+                            Tags: <code>{", ".join(m.tags) if m.tags else "incident-experience"}</code> | Type: <em>{m.memory_type}</em>
                         </div>
                         <pre style="background: #080c14; border: 1px solid rgba(148,163,184,0.1); padding: 10px; border-radius: 6px; font-size: 0.82rem; overflow-x: auto; color: #cbd5e1;">{m.text}</pre>
                     </div>
@@ -977,7 +987,9 @@ elif selected_page == "Memory Explorer":
 
     st.markdown("---")
     st.subheader("🌐 Operational Pattern Reflection (`client.reflect`)")
-    st.markdown("Hindsight's `reflect` synthesizes macro operational patterns across all historical incidents in the bank.")
+    st.markdown(
+        "Hindsight's `reflect` synthesizes macro operational patterns across all historical incidents in the bank."
+    )
 
     reflect_prompt = st.text_input(
         "Reflection Question",
@@ -1028,17 +1040,21 @@ elif selected_page == "Learning Center":
 
         failed_attempts_str = st.text_area(
             "Attempted Mitigations that FAILED (one per line — Negative Experience)",
-            value="\n".join(curr_inc.failed_mitigation_attempts) if curr_inc.failed_mitigation_attempts else "Increasing client timeout thresholds",
+            value="\n".join(curr_inc.failed_mitigation_attempts)
+            if curr_inc.failed_mitigation_attempts
+            else "Increasing client timeout thresholds",
         )
 
         evidence_str = st.text_input(
             "Verification Evidence",
-            value=curr_inc.verification_evidence or "Grafana dashboard confirmed P99 latency dropped from 8500ms to 115ms.",
+            value=curr_inc.verification_evidence
+            or "Grafana dashboard confirmed P99 latency dropped from 8500ms to 115ms.",
         )
 
         lessons_str = st.text_area(
             "Lessons Learned",
-            value=curr_inc.lessons_learned or "Never increase timeout thresholds when pool exhaustion is the root bottleneck.",
+            value=curr_inc.lessons_learned
+            or "Never increase timeout thresholds when pool exhaustion is the root bottleneck.",
         )
 
         engineer_name = st.text_input("Verified By (Engineer Name / Role)", value="Senior Staff SRE")
@@ -1060,7 +1076,9 @@ elif selected_page == "Learning Center":
 
         if ret_result.get("success"):
             st.success(f"✅ {ret_result.get('message')}")
-            st.info(f"Pipeline Status: `{ret_result.get('status')}` | Operation: `{ret_result.get('hindsight_operation_id') or 'local-sync'}`")
+            st.info(
+                f"Pipeline Status: `{ret_result.get('status')}` | Operation: `{ret_result.get('hindsight_operation_id') or 'local-sync'}`"
+            )
             if ret_result.get("conflict_detected"):
                 st.warning(f"⚠️ **Conflict Alert**: {ret_result.get('conflict_details')}")
         else:
@@ -1072,17 +1090,17 @@ elif selected_page == "Learning Center":
     if resolutions:
         for r in resolutions[:5]:
             status_tag = f"<span class='sre-pill pill-cyan'>{r.get('status', 'SAVED')}</span>"
-            conflict_tag = "<span class='sre-pill pill-amber'>CONFLICT</span>" if r.get('conflict_detected') else ""
+            conflict_tag = "<span class='sre-pill pill-amber'>CONFLICT</span>" if r.get("conflict_detected") else ""
             st.markdown(
                 f"""
                 <div class="sre-card">
                     <div class="sre-card-header">
-                        <span>Incident: <code>{r['incident_id']}</code> {status_tag} {conflict_tag}</span>
-                        <span class="sre-pill pill-live">Verified by {r.get('verified_by', 'SRE')}</span>
+                        <span>Incident: <code>{r["incident_id"]}</code> {status_tag} {conflict_tag}</span>
+                        <span class="sre-pill pill-live">Verified by {r.get("verified_by", "SRE")}</span>
                     </div>
-                    <div style="font-size: 0.88rem; margin-bottom: 4px;"><strong>Root Cause:</strong> {r['verified_root_cause']}</div>
-                    <div style="font-size: 0.88rem; margin-bottom: 4px; color: #34d399;"><strong>Resolution:</strong> {r['successful_resolution']}</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8;">Recorded At: {r['created_at']}</div>
+                    <div style="font-size: 0.88rem; margin-bottom: 4px;"><strong>Root Cause:</strong> {r["verified_root_cause"]}</div>
+                    <div style="font-size: 0.88rem; margin-bottom: 4px; color: #34d399;"><strong>Resolution:</strong> {r["successful_resolution"]}</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8;">Recorded At: {r["created_at"]}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1130,7 +1148,9 @@ elif selected_page == "Evaluation Lab":
         composite = metrics.get("composite_score", {})
         h_status = summary.get("hindsight_status", "OFFLINE_PREVIEW")
 
-        st.caption(f"Benchmark Run ID: `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}` | Mode: `{h_status}`")
+        st.caption(
+            f"Benchmark Run ID: `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}` | Mode: `{h_status}`"
+        )
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -1138,8 +1158,8 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Top-1 Root Cause Accuracy</div>
-                    <div class="sre-kpi-value" style="color: #34d399;">{acc_top1.get('memory_enabled', 0)}%</div>
-                    <div class="sre-kpi-sub">+{acc_top1.get('memory_enabled', 0) - acc_top1.get('memory_disabled', 0):.1f}% vs Memory OFF</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{acc_top1.get("memory_enabled", 0)}%</div>
+                    <div class="sre-kpi-sub">+{acc_top1.get("memory_enabled", 0) - acc_top1.get("memory_disabled", 0):.1f}% vs Memory OFF</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1149,7 +1169,7 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Failed Fix Avoidance</div>
-                    <div class="sre-kpi-value" style="color: #34d399;">{avoid.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{avoid.get("memory_enabled", 0)}%</div>
                     <div class="sre-kpi-sub">100% Pitfalls Flagged</div>
                 </div>
                 """,
@@ -1160,19 +1180,19 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Recommendation Safety</div>
-                    <div class="sre-kpi-value" style="color: #38bdf8;">{safety.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-value" style="color: #38bdf8;">{safety.get("memory_enabled", 0)}%</div>
                     <div class="sre-kpi-sub">Zero Unsafe Commands</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
         with c4:
-            delta_comp = composite.get('memory_enabled', 0) - composite.get('memory_disabled', 0)
+            delta_comp = composite.get("memory_enabled", 0) - composite.get("memory_disabled", 0)
             st.markdown(
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Composite Score (/100)</div>
-                    <div class="sre-kpi-value" style="color: #34d399;">{composite.get('memory_enabled', 0)}</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{composite.get("memory_enabled", 0)}</div>
                     <div class="sre-kpi-sub">+{delta_comp:.1f} pts vs Memory OFF</div>
                 </div>
                 """,
@@ -1183,22 +1203,102 @@ elif selected_page == "Evaluation Lab":
 
         with st.expander("📊 Complete 16-Dimensional Benchmark Metrics Breakdown", expanded=True):
             dims_data = [
-                {"Dimension": "1. Top-1 Root Cause Accuracy", "Memory OFF": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_enabled', 0)}%", "Standard": "Deterministic rubric match on primary hypothesis"},
-                {"Dimension": "2. Top-3 Root Cause Accuracy", "Memory OFF": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_enabled', 0)}%", "Standard": "Root cause contained in candidate set"},
-                {"Dimension": "3. Causal Reasoning Quality", "Memory OFF": f"{metrics.get('causal_reasoning_quality', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('causal_reasoning_quality', {}).get('memory_enabled', 0)}%", "Standard": "Logical causality connecting changes to failure mechanics"},
-                {"Dimension": "4. Evidence Grounding Rate", "Memory OFF": f"{metrics.get('evidence_grounding_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('evidence_grounding_rate', {}).get('memory_enabled', 0)}%", "Standard": "Hypotheses cite verified telemetry tokens"},
-                {"Dimension": "5. Retrieval Precision@k", "Memory OFF": f"{metrics.get('retrieval_precision_pct', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('retrieval_precision_pct', {}).get('memory_enabled', 0)}%", "Standard": "Precision of retrieved historical memories"},
-                {"Dimension": "6. Retrieval Recall@k", "Memory OFF": f"{metrics.get('retrieval_recall_pct', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('retrieval_recall_pct', {}).get('memory_enabled', 0)}%", "Standard": "Recall of expected target postmortems"},
-                {"Dimension": "7. Mean Reciprocal Rank (MRR)", "Memory OFF": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_disabled', 0):.3f}", "Memory ON": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_enabled', 0):.3f}", "Standard": "Rank of target incident in recall list"},
-                {"Dimension": "8. Relevant Memory Retrieval Rate", "Memory OFF": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_enabled', 0)}%", "Standard": "Correct identification of related postmortems"},
-                {"Dimension": "9. Failed Mitigation Avoidance", "Memory OFF": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_enabled', 0)}%", "Standard": "Zero repetition of documented failed fixes"},
-                {"Dimension": "10. Recommendation Action Quality", "Memory OFF": f"{metrics.get('recommendation_action_quality', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('recommendation_action_quality', {}).get('memory_enabled', 0)}%", "Standard": "Actionability, rationale, and technical correctness"},
-                {"Dimension": "11. Recommendation Safety", "Memory OFF": f"{metrics.get('recommendation_safety_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('recommendation_safety_rate', {}).get('memory_enabled', 0)}%", "Standard": "Destructive shell command prevention & human checks"},
-                {"Dimension": "12. False Recall Rate (Lower=Better)", "Memory OFF": f"{metrics.get('false_historical_recall_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('false_historical_recall_rate', {}).get('memory_enabled', 0)}%", "Standard": "Zero false recall on novel distractors"},
-                {"Dimension": "13. Novel Incident Handling Rate", "Memory OFF": f"{metrics.get('novel_incident_handling_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('novel_incident_handling_rate', {}).get('memory_enabled', 0)}%", "Standard": "Safe handling and zero hallucinated precedents"},
-                {"Dimension": "14. Confidence Calibration (Brier / ECE)", "Memory OFF": f"Brier={metrics.get('brier_score', {}).get('memory_disabled', 0):.3f}, ECE={metrics.get('expected_calibration_error', {}).get('memory_disabled', 0):.3f}", "Memory ON": f"Brier={metrics.get('brier_score', {}).get('memory_enabled', 0):.3f}, ECE={metrics.get('expected_calibration_error', {}).get('memory_enabled', 0):.3f}", "Standard": "Probability calibration vs empirical Top-1 correctness"},
-                {"Dimension": "15. Investigation Consistency", "Memory OFF": f"{metrics.get('investigation_consistency_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('investigation_consistency_rate', {}).get('memory_enabled', 0)}%", "Standard": "Internal consistency across hypothesis & remedy"},
-                {"Dimension": "16. Human Verification Compliance", "Memory OFF": f"{metrics.get('human_verification_compliance_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('human_verification_compliance_rate', {}).get('memory_enabled', 0)}%", "Standard": "Strict enforcement of human approval requirement"},
+                {
+                    "Dimension": "1. Top-1 Root Cause Accuracy",
+                    "Memory OFF": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Deterministic rubric match on primary hypothesis",
+                },
+                {
+                    "Dimension": "2. Top-3 Root Cause Accuracy",
+                    "Memory OFF": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Root cause contained in candidate set",
+                },
+                {
+                    "Dimension": "3. Causal Reasoning Quality",
+                    "Memory OFF": f"{metrics.get('causal_reasoning_quality', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('causal_reasoning_quality', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Logical causality connecting changes to failure mechanics",
+                },
+                {
+                    "Dimension": "4. Evidence Grounding Rate",
+                    "Memory OFF": f"{metrics.get('evidence_grounding_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('evidence_grounding_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Hypotheses cite verified telemetry tokens",
+                },
+                {
+                    "Dimension": "5. Retrieval Precision@k",
+                    "Memory OFF": f"{metrics.get('retrieval_precision_pct', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('retrieval_precision_pct', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Precision of retrieved historical memories",
+                },
+                {
+                    "Dimension": "6. Retrieval Recall@k",
+                    "Memory OFF": f"{metrics.get('retrieval_recall_pct', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('retrieval_recall_pct', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Recall of expected target postmortems",
+                },
+                {
+                    "Dimension": "7. Mean Reciprocal Rank (MRR)",
+                    "Memory OFF": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_disabled', 0):.3f}",
+                    "Memory ON": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_enabled', 0):.3f}",
+                    "Standard": "Rank of target incident in recall list",
+                },
+                {
+                    "Dimension": "8. Relevant Memory Retrieval Rate",
+                    "Memory OFF": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Correct identification of related postmortems",
+                },
+                {
+                    "Dimension": "9. Failed Mitigation Avoidance",
+                    "Memory OFF": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Zero repetition of documented failed fixes",
+                },
+                {
+                    "Dimension": "10. Recommendation Action Quality",
+                    "Memory OFF": f"{metrics.get('recommendation_action_quality', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('recommendation_action_quality', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Actionability, rationale, and technical correctness",
+                },
+                {
+                    "Dimension": "11. Recommendation Safety",
+                    "Memory OFF": f"{metrics.get('recommendation_safety_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('recommendation_safety_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Destructive shell command prevention & human checks",
+                },
+                {
+                    "Dimension": "12. False Recall Rate (Lower=Better)",
+                    "Memory OFF": f"{metrics.get('false_historical_recall_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('false_historical_recall_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Zero false recall on novel distractors",
+                },
+                {
+                    "Dimension": "13. Novel Incident Handling Rate",
+                    "Memory OFF": f"{metrics.get('novel_incident_handling_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('novel_incident_handling_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Safe handling and zero hallucinated precedents",
+                },
+                {
+                    "Dimension": "14. Confidence Calibration (Brier / ECE)",
+                    "Memory OFF": f"Brier={metrics.get('brier_score', {}).get('memory_disabled', 0):.3f}, ECE={metrics.get('expected_calibration_error', {}).get('memory_disabled', 0):.3f}",
+                    "Memory ON": f"Brier={metrics.get('brier_score', {}).get('memory_enabled', 0):.3f}, ECE={metrics.get('expected_calibration_error', {}).get('memory_enabled', 0):.3f}",
+                    "Standard": "Probability calibration vs empirical Top-1 correctness",
+                },
+                {
+                    "Dimension": "15. Investigation Consistency",
+                    "Memory OFF": f"{metrics.get('investigation_consistency_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('investigation_consistency_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Internal consistency across hypothesis & remedy",
+                },
+                {
+                    "Dimension": "16. Human Verification Compliance",
+                    "Memory OFF": f"{metrics.get('human_verification_compliance_rate', {}).get('memory_disabled', 0)}%",
+                    "Memory ON": f"{metrics.get('human_verification_compliance_rate', {}).get('memory_enabled', 0)}%",
+                    "Standard": "Strict enforcement of human approval requirement",
+                },
             ]
             st.dataframe(pd.DataFrame(dims_data), hide_index=True, use_container_width=True)
 
@@ -1208,16 +1308,20 @@ elif selected_page == "Evaluation Lab":
         if cases:
             chart_data = []
             for c in cases:
-                chart_data.append({
-                    "Case": c["case_id"],
-                    "Mode": "Memory OFF (Baseline)",
-                    "Score": c["disabled"]["score"],
-                })
-                chart_data.append({
-                    "Case": c["case_id"],
-                    "Mode": "Memory ON (OPSRECALL)",
-                    "Score": c["enabled"]["score"],
-                })
+                chart_data.append(
+                    {
+                        "Case": c["case_id"],
+                        "Mode": "Memory OFF (Baseline)",
+                        "Score": c["disabled"]["score"],
+                    }
+                )
+                chart_data.append(
+                    {
+                        "Case": c["case_id"],
+                        "Mode": "Memory ON (OPSRECALL)",
+                        "Score": c["enabled"]["score"],
+                    }
+                )
 
             df_chart = pd.DataFrame(chart_data)
             fig = px.bar(
@@ -1233,26 +1337,29 @@ elif selected_page == "Evaluation Lab":
                 plot_bgcolor="rgba(8, 12, 20, 0.6)",
                 paper_bgcolor="rgba(8, 12, 20, 0.6)",
                 font_color="#e2e8f0",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(gridcolor="rgba(148, 163, 184, 0.1)"),
-                yaxis=dict(gridcolor="rgba(148, 163, 184, 0.1)", range=[0, 110]),
-                margin=dict(l=20, r=20, t=50, b=20),
+                legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+                xaxis={"gridcolor": "rgba(148, 163, 184, 0.1)"},
+                yaxis={"gridcolor": "rgba(148, 163, 184, 0.1)", "range": [0, 110]},
+                margin={"l": 20, "r": 20, "t": 50, "b": 20},
             )
             st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("📋 Detailed Per-Scenario Scorecard (Isolated Ground Truth)")
             case_rows = []
             for c in cases:
-                case_rows.append({
-                    "Case ID": c["case_id"],
-                    "Service": c["service"],
-                    "Scenario Type": c.get("scenario_type", "recurrent_incident"),
-                    "Score (OFF)": f"{c['disabled']['score']:.1f}",
-                    "Score (ON)": f"{c['enabled']['score']:.1f}",
-                    "Failed Fix Avoided (OFF)": "Yes" if c["disabled"]["avoided_failed"] else "No",
-                    "Failed Fix Avoided (ON)": "Yes" if c["enabled"]["avoided_failed"] else "Yes",
-                    "Historical Precedent Cited": ", ".join(c["enabled"].get("historical_refs", [])) or "None (Novel/Correct)",
-                })
+                case_rows.append(
+                    {
+                        "Case ID": c["case_id"],
+                        "Service": c["service"],
+                        "Scenario Type": c.get("scenario_type", "recurrent_incident"),
+                        "Score (OFF)": f"{c['disabled']['score']:.1f}",
+                        "Score (ON)": f"{c['enabled']['score']:.1f}",
+                        "Failed Fix Avoided (OFF)": "Yes" if c["disabled"]["avoided_failed"] else "No",
+                        "Failed Fix Avoided (ON)": "Yes" if c["enabled"]["avoided_failed"] else "No",
+                        "Historical Precedent Cited": ", ".join(c["enabled"].get("historical_refs", []))
+                        or "None (Novel/Correct)",
+                    }
+                )
             df_cases = pd.DataFrame(case_rows)
             st.dataframe(df_cases, hide_index=True, use_container_width=True)
 
@@ -1272,9 +1379,7 @@ elif selected_page == "Evaluation Lab":
 elif selected_page == "Architecture & About":
     st.markdown('<div class="hero-tag">🏛️ System Architecture</div>', unsafe_allow_html=True)
     st.title("🏛️ Architecture & Technology")
-    st.markdown(
-        "OPSRECALL decouples **Persistent Operational Memory** (Hindsight) from **Reasoning** (Groq)."
-    )
+    st.markdown("OPSRECALL decouples **Persistent Operational Memory** (Hindsight) from **Reasoning** (Groq).")
 
     arch_img_path = Path("assets/architecture.png")
     if arch_img_path.exists():

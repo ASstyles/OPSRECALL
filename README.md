@@ -87,7 +87,7 @@ client = Hindsight(
     base_url="https://api.hindsight.vectorize.io",
     api_key="your_hindsight_api_key",
     timeout=30.0,
-    user_agent="OPSRECALL-Incident-Agent/1.0"
+    user_agent="OPSRECALL-Incident-Agent/1.0",
 )
 ```
 

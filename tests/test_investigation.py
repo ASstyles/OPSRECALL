@@ -3,6 +3,7 @@ Unit tests for Investigation Engine and LLM Reasoning.
 """
 
 import pytest
+
 from core.investigation import InvestigationEngine
 from core.validators import InvestigationResult
 
@@ -62,4 +63,3 @@ def test_run_comparison_side_by_side(checkout_incident):
     assert len(enabled.previous_failed_approaches) >= len(disabled.previous_failed_approaches)
     assert disabled.execution_time_seconds >= 0.0
     assert enabled.execution_time_seconds >= 0.0
-

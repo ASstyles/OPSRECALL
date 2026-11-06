@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -25,28 +26,28 @@ class Incident(BaseModel):
     affected_service: str = Field(..., description="Name of the impacted service")
     incident_timestamp: str = Field(default_factory=current_iso_time)
     severity: Literal["SEV-1", "SEV-2", "SEV-3", "SEV-4"] = Field(..., description="Severity level")
-    symptoms: List[str] = Field(default_factory=list, description="Observed operational symptoms")
-    error_logs: List[str] = Field(default_factory=list, description="Error log excerpts")
-    metrics: Dict[str, Any] = Field(default_factory=dict, description="Key operational metrics")
-    deployment_id: Optional[str] = Field(default=None, description="Recent deployment identifier")
-    deployment_or_change: Optional[str] = Field(default=None, description="Recent code or config change")
-    
-    # Crucial Distinction: Suspected Cause vs Human-Verified Root Cause
-    suspected_cause: Optional[str] = Field(default=None, description="Initial triage suspicion (UNVERIFIED)")
-    actual_verified_root_cause: Optional[str] = Field(default=None, description="Confirmed root cause (VERIFIED)")
-    is_verified: bool = Field(default=False, description="Whether root cause has been verified by an SRE")
-    verified_by: Optional[str] = Field(default=None, description="Engineer or incident commander who verified")
-    verified_at: Optional[str] = Field(default=None, description="Timestamp of human verification")
+    symptoms: list[str] = Field(default_factory=list, description="Observed operational symptoms")
+    error_logs: list[str] = Field(default_factory=list, description="Error log excerpts")
+    metrics: dict[str, Any] = Field(default_factory=dict, description="Key operational metrics")
+    deployment_id: str | None = Field(default=None, description="Recent deployment identifier")
+    deployment_or_change: str | None = Field(default=None, description="Recent code or config change")
 
-    diagnostic_actions_attempted: List[str] = Field(default_factory=list)
-    failed_mitigation_attempts: List[str] = Field(default_factory=list, description="Ineffective or harmful actions")
-    successful_mitigation: Optional[str] = Field(default=None, description="Immediate mitigation that stabilized service")
-    resolution: Optional[str] = Field(default=None, description="Permanent root cause resolution")
-    resolution_outcome: Optional[str] = Field(default=None)
-    verification_evidence: Optional[str] = Field(default=None, description="Metrics or logs proving recovery")
-    lessons_learned: Optional[str] = Field(default=None)
+    # Crucial Distinction: Suspected Cause vs Human-Verified Root Cause
+    suspected_cause: str | None = Field(default=None, description="Initial triage suspicion (UNVERIFIED)")
+    actual_verified_root_cause: str | None = Field(default=None, description="Confirmed root cause (VERIFIED)")
+    is_verified: bool = Field(default=False, description="Whether root cause has been verified by an SRE")
+    verified_by: str | None = Field(default=None, description="Engineer or incident commander who verified")
+    verified_at: str | None = Field(default=None, description="Timestamp of human verification")
+
+    diagnostic_actions_attempted: list[str] = Field(default_factory=list)
+    failed_mitigation_attempts: list[str] = Field(default_factory=list, description="Ineffective or harmful actions")
+    successful_mitigation: str | None = Field(default=None, description="Immediate mitigation that stabilized service")
+    resolution: str | None = Field(default=None, description="Permanent root cause resolution")
+    resolution_outcome: str | None = Field(default=None)
+    verification_evidence: str | None = Field(default=None, description="Metrics or logs proving recovery")
+    lessons_learned: str | None = Field(default=None)
     data_type: str = Field(default="SIMULATED_INCIDENT", description="Explicit simulation label")
-    content_hash: Optional[str] = Field(default=None, description="SHA-256 fingerprint for deduplication")
+    content_hash: str | None = Field(default=None, description="SHA-256 fingerprint for deduplication")
 
     def compute_content_hash(self) -> str:
         """Generate a deterministic SHA-256 hash of core incident characteristics."""
@@ -66,11 +67,11 @@ class EvaluationCase(BaseModel):
     case_title: str
     affected_service: str
     severity: Literal["SEV-1", "SEV-2", "SEV-3", "SEV-4"]
-    symptoms: List[str] = Field(default_factory=list)
-    error_logs: List[str] = Field(default_factory=list)
-    metrics: Dict[str, Any] = Field(default_factory=dict)
-    recent_deployment: Optional[str] = None
-    configuration_changes: Optional[str] = None
+    symptoms: list[str] = Field(default_factory=list)
+    error_logs: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    recent_deployment: str | None = None
+    configuration_changes: str | None = None
 
 
 class EvaluationGroundTruth(BaseModel):
@@ -82,9 +83,9 @@ class EvaluationGroundTruth(BaseModel):
     case_id: str
     scenario_type: str = Field(default="recurrent_incident")
     ground_truth_root_cause: str
-    expected_historical_match: Optional[str] = None
-    unsuccessful_mitigations_to_avoid: List[str] = Field(default_factory=list)
-    expected_optimal_first_action: Optional[str] = None
+    expected_historical_match: str | None = None
+    unsuccessful_mitigations_to_avoid: list[str] = Field(default_factory=list)
+    expected_optimal_first_action: str | None = None
     is_distractor: bool = False
     requires_uncertainty: bool = False
     rubric_notes: str = ""
@@ -97,12 +98,12 @@ class RecalledMemoryItem(BaseModel):
     memory_id: str
     text: str
     memory_type: str = Field(default="experience", description="world, experience, or observation")
-    document_id: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    relevance_score: Optional[float] = None
-    source_incident_id: Optional[str] = None
-    timestamp: Optional[str] = None
+    document_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    relevance_score: float | None = None
+    source_incident_id: str | None = None
+    timestamp: str | None = None
     is_verified: bool = False
 
 
@@ -116,17 +117,17 @@ class StructuredRetrievalResult(BaseModel):
     title: str
     service: str
     why_retrieved: str
-    matching_evidence: List[str] = Field(default_factory=list)
-    relevance_score: Optional[float] = None
-    ranking_factors: Dict[str, float] = Field(default_factory=dict)
+    matching_evidence: list[str] = Field(default_factory=list)
+    relevance_score: float | None = None
+    ranking_factors: dict[str, float] = Field(default_factory=dict)
     is_verified: bool = False
-    verified_by: Optional[str] = None
-    verified_root_cause: Optional[str] = None
-    failed_mitigations_to_avoid: List[str] = Field(default_factory=list)
-    effective_resolution: Optional[str] = None
-    temporal_recency: Optional[str] = None
-    memory_limitations: Optional[str] = None
-    raw_memory: Optional[RecalledMemoryItem] = None
+    verified_by: str | None = None
+    verified_root_cause: str | None = None
+    failed_mitigations_to_avoid: list[str] = Field(default_factory=list)
+    effective_resolution: str | None = None
+    temporal_recency: str | None = None
+    memory_limitations: str | None = None
+    raw_memory: RecalledMemoryItem | None = None
 
 
 class Hypothesis(BaseModel):
@@ -134,13 +135,13 @@ class Hypothesis(BaseModel):
 
     rank: int = Field(..., ge=1, le=5)
     hypothesis: str
-    supporting_evidence: List[str] = Field(default_factory=list)
-    contradictory_evidence: List[str] = Field(default_factory=list)
+    supporting_evidence: list[str] = Field(default_factory=list)
+    contradictory_evidence: list[str] = Field(default_factory=list)
     likelihood: Literal["High", "Medium", "Low"] = "Medium"
     probability: float = Field(default=0.5, ge=0.0, le=1.0)
-    historical_precedent: Optional[str] = None
-    missing_evidence: List[str] = Field(default_factory=list)
-    validation_procedure: Optional[str] = None
+    historical_precedent: str | None = None
+    missing_evidence: list[str] = Field(default_factory=list)
+    validation_procedure: str | None = None
 
 
 class ActionRecommendation(BaseModel):
@@ -148,14 +149,16 @@ class ActionRecommendation(BaseModel):
 
     step_number: int
     action_type: Literal["Diagnostic", "Remediation", "Verification"]
-    safety_classification: Literal["Diagnostic", "Read-only", "Reversible", "Potentially disruptive", "Destructive", "Prohibited"] = "Read-only"
+    safety_classification: Literal[
+        "Diagnostic", "Read-only", "Reversible", "Potentially disruptive", "Destructive", "Prohibited"
+    ] = "Read-only"
     description: str
     rationale: str
     expected_impact: str = ""
-    preconditions: List[str] = Field(default_factory=list)
-    verification_steps: List[str] = Field(default_factory=list)
+    preconditions: list[str] = Field(default_factory=list)
+    verification_steps: list[str] = Field(default_factory=list)
     potential_risks: str = "Low risk if followed according to SOP."
-    commands_or_checks: List[str] = Field(default_factory=list)
+    commands_or_checks: list[str] = Field(default_factory=list)
     requires_human_approval: bool = True
     is_destructive: bool = False
     reversibility: Literal["Fully Reversible", "Partially Reversible", "Irreversible"] = "Fully Reversible"
@@ -167,7 +170,7 @@ class FailedApproachWarning(BaseModel):
     approach: str
     why_failed: str
     historical_source_incident: str
-    suggested_alternative: Optional[str] = None
+    suggested_alternative: str | None = None
 
 
 class InvestigationResult(BaseModel):
@@ -176,21 +179,23 @@ class InvestigationResult(BaseModel):
     investigation_id: str
     incident_id: str
     mode: Literal["MEMORY_ENABLED", "MEMORY_DISABLED"]
-    retrieval_mode_label: str = Field(default="LIVE_HINDSIGHT", description="LIVE_HINDSIGHT, OFFLINE_SIMULATION, or DISABLED")
+    retrieval_mode_label: str = Field(
+        default="LIVE_HINDSIGHT", description="LIVE_HINDSIGHT, OFFLINE_SIMULATION, or DISABLED"
+    )
     executive_summary: str
-    hypotheses: List[Hypothesis] = Field(default_factory=list)
-    evidence_summary: List[str] = Field(default_factory=list)
-    recalled_memories: List[RecalledMemoryItem] = Field(default_factory=list)
-    structured_retrievals: List[StructuredRetrievalResult] = Field(default_factory=list)
-    historical_incidents_referenced: List[str] = Field(default_factory=list)
-    previous_failed_approaches: List[FailedApproachWarning] = Field(default_factory=list)
-    memory_contradictions_detected: List[str] = Field(default_factory=list)
-    recommended_diagnostic_actions: List[ActionRecommendation] = Field(default_factory=list)
-    recommended_remediation_steps: List[ActionRecommendation] = Field(default_factory=list)
+    hypotheses: list[Hypothesis] = Field(default_factory=list)
+    evidence_summary: list[str] = Field(default_factory=list)
+    recalled_memories: list[RecalledMemoryItem] = Field(default_factory=list)
+    structured_retrievals: list[StructuredRetrievalResult] = Field(default_factory=list)
+    historical_incidents_referenced: list[str] = Field(default_factory=list)
+    previous_failed_approaches: list[FailedApproachWarning] = Field(default_factory=list)
+    memory_contradictions_detected: list[str] = Field(default_factory=list)
+    recommended_diagnostic_actions: list[ActionRecommendation] = Field(default_factory=list)
+    recommended_remediation_steps: list[ActionRecommendation] = Field(default_factory=list)
     confidence_level: Literal["High", "Medium", "Low"] = "Medium"
     confidence_explanation: str
     numerical_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
-    missing_information: List[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
     requires_human_intervention: bool = True
     is_simulated: bool = True
     execution_time_seconds: float = 0.0
@@ -204,7 +209,7 @@ class ResolutionFeedback(BaseModel):
     incident_id: str
     verified_root_cause: str
     successful_resolution: str
-    failed_approaches: List[str] = Field(default_factory=list)
+    failed_approaches: list[str] = Field(default_factory=list)
     verification_evidence: str
     lessons_learned: str
     verified_by: str = "SRE On-Call Engineer"
@@ -216,13 +221,13 @@ class ResolutionFeedback(BaseModel):
         "HINDSIGHT_RETENTION_ATTEMPTED",
         "HINDSIGHT_RETENTION_CONFIRMED",
         "MEMORY_RETRIEVABLE",
-        "RETENTION_FAILED"
+        "RETENTION_FAILED",
     ] = "FEEDBACK_RECEIVED"
     retained_to_hindsight: bool = False
-    hindsight_operation_id: Optional[str] = None
-    error_message: Optional[str] = None
+    hindsight_operation_id: str | None = None
+    error_message: str | None = None
     conflict_detected: bool = False
-    conflict_details: Optional[str] = None
+    conflict_details: str | None = None
     created_at: str = Field(default_factory=current_iso_time)
 
 
@@ -235,11 +240,11 @@ class CaseEvaluationScore(BaseModel):
     case_id: str
     scenario_type: str = "recurrent_incident"
     memory_mode: Literal["MEMORY_ENABLED", "MEMORY_DISABLED"]
-    
+
     # 1. Root Cause Identification
     top_1_root_cause_hit: bool = False
     top_3_root_cause_hit: bool = False
-    
+
     # 2. Causal Reasoning Quality (0.0 to 1.0)
     causal_reasoning_score: float = 0.0
 
@@ -283,4 +288,4 @@ class CaseEvaluationScore(BaseModel):
     # Composite Normalized Score (0.0 - 100.0)
     overall_score: float = Field(..., ge=0.0, le=100.0)
     explanation: str = ""
-    detailed_rubric_breakdown: Dict[str, float] = Field(default_factory=dict)
+    detailed_rubric_breakdown: dict[str, float] = Field(default_factory=dict)

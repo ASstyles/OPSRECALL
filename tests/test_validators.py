@@ -4,16 +4,14 @@ Unit tests for OPSRECALL data models and validators.
 
 import pytest
 from pydantic import ValidationError
+
 from core.validators import (
-    Incident,
     EvaluationCase,
     EvaluationGroundTruth,
-    Hypothesis,
-    ActionRecommendation,
     FailedApproachWarning,
-    InvestigationResult,
+    Hypothesis,
+    Incident,
     ResolutionFeedback,
-    CaseEvaluationScore,
 )
 
 
@@ -102,4 +100,3 @@ def test_resolution_feedback_model():
     )
     assert fb.incident_id == "INC-001"
     assert not fb.retained_to_hindsight
-

@@ -13,12 +13,11 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import sys
-import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -27,9 +26,9 @@ from config import settings
 from core.hindsight_client import HindsightClientWrapper, get_hindsight_client
 
 
-def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Dict[str, Any]:
+def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> dict[str, Any]:
     """Execute the complete 20-step rigorous live Hindsight verification suite per Part 9."""
-    report: Dict[str, Any] = {
+    report: dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "bank_id": test_bank_id,
         "base_url": client.base_url,
@@ -50,13 +49,15 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
     unique_token = f"OPSRECALL_TOKEN_{unique_run_id}"
 
     def record_step(step_num: int, name: str, success: bool, details: str) -> bool:
-        report["steps"].append({
-            "step": step_num,
-            "name": name,
-            "success": success,
-            "details": details,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        report["steps"].append(
+            {
+                "step": step_num,
+                "name": name,
+                "success": success,
+                "details": details,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         if success:
             report["passed_steps"] += 1
             print(f"Step {step_num:02d}: {name} -> [PASS] {details}")
@@ -76,7 +77,12 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
     # Step 2: Establish actual API connectivity
     health = client.check_health()
     if health.get("status") == "CONNECTED":
-        record_step(2, "Establish API Connectivity", True, f"Connected to {client.base_url} (latency: {health.get('latency_ms')}ms).")
+        record_step(
+            2,
+            "Establish API Connectivity",
+            True,
+            f"Connected to {client.base_url} (latency: {health.get('latency_ms')}ms).",
+        )
     else:
         record_step(2, "Establish API Connectivity", False, f"API health check failed: {health.get('message')}")
         return finalize_report(report)
@@ -144,7 +150,9 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
 
     # Step 9: Fail if indexing is not confirmed when required
     if indexed:
-        record_step(9, "Assert Indexing Confirmed", True, "Document indexed and memory units confirmed visible in bank.")
+        record_step(
+            9, "Assert Indexing Confirmed", True, "Document indexed and memory units confirmed visible in bank."
+        )
     else:
         record_step(9, "Assert Indexing Confirmed", False, "Indexing timed out after 25s. Document not confirmed.")
         report["status"] = "TIMEOUT"
@@ -162,8 +170,8 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
         record_step(10, "Create Fresh Client Instance", False, f"Failed initializing fresh client: {e}")
         return finalize_report(report)
 
-    # Step 11: Recall using a semantically related query
-    recall_query = f"verification-probe-service thread starvation connection pool {unique_token}"
+    # Step 11: Recall using a semantically related query (WITHOUT query-side probe token leakage)
+    recall_query = "verification-probe-service thread starvation connection pool"
     try:
         recall_resp = fresh_client.recall(
             query=recall_query,
@@ -192,21 +200,32 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
             break
 
     if token_matched:
-        record_step(12, "Assert Target Probe Retrieval", True, f"Found exact token '{unique_token}' in retrieved memory!")
+        record_step(
+            12, "Assert Target Probe Retrieval", True, f"Found exact token '{unique_token}' in retrieved memory!"
+        )
     else:
-        record_step(12, "Assert Target Probe Retrieval", False, f"Token '{unique_token}' missing from {len(results)} returned results.")
+        record_step(
+            12,
+            "Assert Target Probe Retrieval",
+            False,
+            f"Token '{unique_token}' missing from {len(results)} returned results.",
+        )
         return finalize_report(report)
 
     # Step 13: Verify operational content integrity
     if "verification-probe-service" in matched_text and "Latency spike" in matched_text:
-        record_step(13, "Verify Operational Content Integrity", True, "Symptoms, service, and deployment context preserved.")
+        record_step(
+            13, "Verify Operational Content Integrity", True, "Symptoms, service, and deployment context preserved."
+        )
     else:
         record_step(13, "Verify Operational Content Integrity", False, "Service context missing from retrieved text.")
         return finalize_report(report)
 
     # Step 14: Verify historical failed mitigation content
     if "Failed Fix" in matched_text or "thread starvation" in matched_text:
-        record_step(14, "Verify Failed Mitigation Content", True, "Negative experience (failed fix) preserved in memory.")
+        record_step(
+            14, "Verify Failed Mitigation Content", True, "Negative experience (failed fix) preserved in memory."
+        )
     else:
         record_step(14, "Verify Failed Mitigation Content", False, "Failed fix warning missing from retrieved text.")
         return finalize_report(report)
@@ -215,7 +234,9 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
     if "Verified Fix" in matched_text or "connection pool" in matched_text or "150" in matched_text:
         record_step(15, "Verify Successful Resolution Content", True, "Verified remedy preserved in memory.")
     else:
-        record_step(15, "Verify Successful Resolution Content", False, "Verified resolution missing from retrieved text.")
+        record_step(
+            15, "Verify Successful Resolution Content", False, "Verified resolution missing from retrieved text."
+        )
         return finalize_report(report)
 
     # Step 16: Re-retain using the same document ID
@@ -225,14 +246,18 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
             document_id=test_doc_id,
             bank_id=test_bank_id,
         )
-        record_step(16, "Re-retain Same Document ID", True, "Second retention request submitted with identical document_id.")
+        record_step(
+            16, "Re-retain Same Document ID", True, "Second retention request submitted with identical document_id."
+        )
     except Exception as e:
         record_step(16, "Re-retain Same Document ID", False, f"Re-retention failed: {e}")
         return finalize_report(report)
 
     # Step 17: Verify idempotency according to actual SDK behaviour
     if getattr(re_retain_resp, "success", False):
-        record_step(17, "Verify Idempotency Behaviour", True, f"Idempotent document overwrite confirmed for {test_doc_id}.")
+        record_step(
+            17, "Verify Idempotency Behaviour", True, f"Idempotent document overwrite confirmed for {test_doc_id}."
+        )
     else:
         record_step(17, "Verify Idempotency Behaviour", False, "Re-retention response success was False.")
         return finalize_report(report)
@@ -253,9 +278,19 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
         for ur in unrelated_results
     )
     if not false_token_found:
-        record_step(19, "Verify Unrelated Query Discrimination", True, f"Unrelated query returned {len(unrelated_results)} results without probe leakage.")
+        record_step(
+            19,
+            "Verify Unrelated Query Discrimination",
+            True,
+            f"Unrelated query returned {len(unrelated_results)} results without probe leakage.",
+        )
     else:
-        record_step(19, "Verify Unrelated Query Discrimination", False, "Probe document falsely leaked into unrelated query results.")
+        record_step(
+            19,
+            "Verify Unrelated Query Discrimination",
+            False,
+            "Probe document falsely leaked into unrelated query results.",
+        )
         return finalize_report(report)
 
     # Step 20: Produce a machine-readable report
@@ -265,7 +300,7 @@ def run_live_test_suite(client: HindsightClientWrapper, test_bank_id: str) -> Di
     return finalize_report(report)
 
 
-def finalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
+def finalize_report(report: dict[str, Any]) -> dict[str, Any]:
     """Save machine-readable verification report to disk."""
     out_dir = settings.AUDIT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -322,7 +357,9 @@ def main() -> int:
                 print(f"\n[FAIL] Live verification failed: {report.get('failure_reason')}")
                 return 1
         else:
-            print("To run the isolated 20-step live memory test suite, use: python scripts/verify_hindsight.py --live-test")
+            print(
+                "To run the isolated 20-step live memory test suite, use: python scripts/verify_hindsight.py --live-test"
+            )
             return 0
     elif status == "NOT_CONFIGURED":
         print("[INFO] Hindsight API key is missing in .env. The application operates in offline inspection mode.")

@@ -12,7 +12,8 @@ import logging
 import random
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from config import settings
 from core.validators import (
     ActionRecommendation,
@@ -112,8 +113,8 @@ class LLMEngine:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
+        api_key: str | None = None,
+        model: str | None = None,
     ):
         self._explicit_api_key = api_key
         self._explicit_model = model
@@ -131,7 +132,11 @@ class LLMEngine:
     def is_configured(self) -> bool:
         """Check if genuine Groq API credentials are present."""
         if self._explicit_api_key is not None:
-            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5 and not self._explicit_api_key.lower().startswith("your_"))
+            return bool(
+                self._explicit_api_key
+                and len(self._explicit_api_key) > 5
+                and not self._explicit_api_key.lower().startswith("your_")
+            )
         return settings.is_groq_configured()
 
     def reset(self) -> None:
@@ -152,7 +157,7 @@ class LLMEngine:
                 self._groq_client = None
         return self._groq_client
 
-    def check_health(self) -> Dict[str, Any]:
+    def check_health(self) -> dict[str, Any]:
         """Perform a genuine health check against Groq account model list."""
         if not self.is_configured:
             env_file = settings.get_env_file_path()
@@ -202,10 +207,10 @@ class LLMEngine:
 
     def generate_investigation(
         self,
-        incident_data: Dict[str, Any],
-        recalled_memories: List[RecalledMemoryItem],
+        incident_data: dict[str, Any],
+        recalled_memories: list[RecalledMemoryItem],
         memory_mode: str = "MEMORY_ENABLED",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate structured incident diagnosis using Groq or offline fallback."""
         clean_telemetry = self._sanitize_telemetry(incident_data)
 
@@ -214,7 +219,9 @@ class LLMEngine:
             try:
                 return self._call_groq_with_retry(clean_telemetry, recalled_memories, memory_mode)
             except Exception as e:
-                logger.warning(f"Groq invocation failed ({e}). Falling back to offline reasoning with honest reporting.")
+                logger.warning(
+                    f"Groq invocation failed ({e}). Falling back to offline reasoning with honest reporting."
+                )
                 fallback = self._generate_offline_reasoning(clean_telemetry, recalled_memories, memory_mode)
                 fallback["llm_model"] = f"offline-rule-based-reasoning (Groq failed: {type(e).__name__})"
                 return fallback
@@ -222,7 +229,7 @@ class LLMEngine:
             return self._generate_offline_reasoning(clean_telemetry, recalled_memories, memory_mode)
 
     @staticmethod
-    def _sanitize_telemetry(data: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_telemetry(data: dict[str, Any]) -> dict[str, Any]:
         """Strictly isolate model-facing telemetry from any evaluation ground truth and redact sensitive secrets."""
         prohibited_keys = {
             "ground_truth_root_cause",
@@ -262,10 +269,7 @@ class LLMEngine:
 
             # Exclude known deprecated models
             deprecated_tokens = ["llama-3.3-70b-versatile", "qwen/qwen3.6-27b"]
-            valid_candidates = [
-                m for m in available
-                if not any(dep in m for dep in deprecated_tokens)
-            ]
+            valid_candidates = [m for m in available if not any(dep in m for dep in deprecated_tokens)]
 
             # Priority preference among active models supporting JSON mode
             for preferred in ["openai/gpt-oss-120b", "llama-3.1-8b-instant"]:
@@ -283,11 +287,11 @@ class LLMEngine:
 
     def _call_groq_with_retry(
         self,
-        incident_data: Dict[str, Any],
-        recalled_memories: List[RecalledMemoryItem],
+        incident_data: dict[str, Any],
+        recalled_memories: list[RecalledMemoryItem],
         memory_mode: str,
         max_retries: int = 3,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Invoke Groq API with structured JSON output, dynamic model selection, and exponential backoff on 429."""
         user_prompt = self._build_investigation_prompt(incident_data, recalled_memories, memory_mode)
         active_model = self.get_verified_account_model()
@@ -317,26 +321,28 @@ class LLMEngine:
                 err_msg = str(e).lower()
                 if "authentication" in err_msg or "unauthorized" in err_msg or "401" in err_msg:
                     logger.error(f"Groq authentication rejected: {e}")
-                    raise RuntimeError(f"Groq API authentication failed (401 Unauthorized): {e}")
+                    raise RuntimeError(f"Groq API authentication failed (401 Unauthorized): {e}") from e
 
                 if "rate limit" in err_msg or "429" in err_msg:
                     if attempt < max_retries:
                         sleep_time = backoff + random.uniform(0.1, 0.5)
-                        logger.warning(f"Groq rate limit hit (429). Retrying in {sleep_time:.2f}s (attempt {attempt}/{max_retries})...")
+                        logger.warning(
+                            f"Groq rate limit hit (429). Retrying in {sleep_time:.2f}s (attempt {attempt}/{max_retries})..."
+                        )
                         time.sleep(sleep_time)
                         backoff *= 2.0
                         continue
 
                 logger.error(f"Live Groq invocation failed on '{active_model}' (attempt {attempt}): {e}")
                 if attempt >= max_retries:
-                    raise RuntimeError(f"Live Groq invocation failed after {max_retries} attempts: {e}")
+                    raise RuntimeError(f"Live Groq invocation failed after {max_retries} attempts: {e}") from e
 
         raise RuntimeError("Groq invocation loop terminated unexpectedly.")
 
     def _build_investigation_prompt(
         self,
-        incident_data: Dict[str, Any],
-        recalled_memories: List[RecalledMemoryItem],
+        incident_data: dict[str, Any],
+        recalled_memories: list[RecalledMemoryItem],
         memory_mode: str,
     ) -> str:
         """Construct the prompt containing current telemetry and optional historical memories inside safety tags."""
@@ -359,7 +365,9 @@ class LLMEngine:
         if memory_mode == "MEMORY_ENABLED":
             prompt_parts.append("\n=== RECALLED HISTORICAL EXPERIENCES (FROM HINDSIGHT OPERATIONAL MEMORY) ===")
             if not recalled_memories:
-                prompt_parts.append("NO HISTORICAL MEMORIES RECALLED. Treat as novel scenario without historical precedent.")
+                prompt_parts.append(
+                    "NO HISTORICAL MEMORIES RECALLED. Treat as novel scenario without historical precedent."
+                )
             else:
                 for idx, mem in enumerate(recalled_memories, 1):
                     prompt_parts.append(
@@ -368,14 +376,16 @@ class LLMEngine:
                     prompt_parts.append(mem.text)
         else:
             prompt_parts.append("\n=== HISTORICAL MEMORY DISABLED ===")
-            prompt_parts.append("Hindsight memory is DISABLED for this investigation. Rely solely on current telemetry.")
+            prompt_parts.append(
+                "Hindsight memory is DISABLED for this investigation. Rely solely on current telemetry."
+            )
 
         prompt_parts.append(
             "\nAnalyze the current incident and return a single valid JSON object following the required schema."
         )
         return "\n".join(prompt_parts)
 
-    def _clean_and_parse_json(self, raw_text: str) -> Dict[str, Any]:
+    def _clean_and_parse_json(self, raw_text: str) -> dict[str, Any]:
         """Clean markdown code blocks and parse JSON string."""
         text = raw_text.strip()
         if text.startswith("```"):
@@ -385,10 +395,10 @@ class LLMEngine:
 
     def _generate_offline_reasoning(
         self,
-        incident_data: Dict[str, Any],
-        recalled_memories: List[RecalledMemoryItem],
+        incident_data: dict[str, Any],
+        recalled_memories: list[RecalledMemoryItem],
         memory_mode: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Deterministic, rule-based expert analysis used when Groq credentials are absent.
         Ensures end-to-end functionality, reproducible evaluations, and unit tests without
@@ -402,8 +412,8 @@ class LLMEngine:
 
         # Check for historical memory clues
         has_memories = bool(recalled_memories and memory_mode == "MEMORY_ENABLED")
-        historical_incidents: List[str] = []
-        failed_approaches: List[FailedApproachWarning] = []
+        historical_incidents: list[str] = []
+        failed_approaches: list[FailedApproachWarning] = []
 
         if has_memories:
             for m in recalled_memories:
@@ -416,12 +426,16 @@ class LLMEngine:
                 if "failed" in text_lower:
                     for line in m.text.splitlines():
                         if "failed" in line.lower() and len(line.strip()) > 10:
-                            clean_line = line.strip().lstrip("-* ").replace("FAILED FIX:", "").replace("FAILED:", "").strip()
+                            clean_line = (
+                                line.strip().lstrip("-* ").replace("FAILED FIX:", "").replace("FAILED:", "").strip()
+                            )
                             failed_approaches.append(
                                 FailedApproachWarning(
                                     approach=clean_line,
                                     why_failed="Recorded as ineffective in prior operational incident.",
-                                    historical_source_incident=m.source_incident_id or m.document_id or "Historical Incident",
+                                    historical_source_incident=m.source_incident_id
+                                    or m.document_id
+                                    or "Historical Incident",
                                 )
                             )
 
@@ -462,7 +476,9 @@ class LLMEngine:
                     description="Identify and terminate blocking DDL migration PID via pg_cancel_backend() or pg_terminate_backend().",
                     rationale="Immediately frees blocked orders table locks without requiring database restart.",
                     potential_risks="Aborts the schema migration transaction cleanly.",
-                    commands_or_checks=["SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%ALTER TABLE%'"],
+                    commands_or_checks=[
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%ALTER TABLE%'"
+                    ],
                 )
             ]
             failed_approaches.append(
@@ -518,7 +534,12 @@ class LLMEngine:
             conf_exp = "High confidence: Error logs indicate direct DNS i/o timeout to CoreDNS cluster IP."
 
         # Case EVAL-009: VPC Network packet loss (Missing deployment context)
-        elif "inventory-worker" in svc or "tcp_retrans" in str(incident_data.get("metrics", {})) or "retransmit" in logs or "packet sequence" in logs:
+        elif (
+            "inventory-worker" in svc
+            or "tcp_retrans" in str(incident_data.get("metrics", {}))
+            or "retransmit" in logs
+            or "packet sequence" in logs
+        ):
             hypotheses = [
                 Hypothesis(
                     rank=1,
@@ -609,7 +630,9 @@ class LLMEngine:
             conf_exp = "High confidence: CPU throttling metrics (84%) and 3800ms invoice rendering time confirm compute bottleneck."
 
         # Case EVAL-011: NodeMemoryPressure (Unsafe Historical Fix)
-        elif "nodememorypressure" in logs or "memorypressure" in logs or "gin index" in logs or "worker-node-04" in logs:
+        elif (
+            "nodememorypressure" in logs or "memorypressure" in logs or "gin index" in logs or "worker-node-04" in logs
+        ):
             hypotheses = [
                 Hypothesis(
                     rank=1,
@@ -644,7 +667,9 @@ class LLMEngine:
                     description="Create concurrent GIN index on products attributes column; do NOT scale pods horizontally due to node memory pressure.",
                     rationale="Fixes slow query execution without exacerbating cluster NodeMemoryPressure and risking OOM eviction.",
                     potential_risks="Brief background index build duration on database.",
-                    commands_or_checks=["CREATE INDEX CONCURRENTLY idx_products_attrs_gin ON products USING gin(attributes);"],
+                    commands_or_checks=[
+                        "CREATE INDEX CONCURRENTLY idx_products_attrs_gin ON products USING gin(attributes);"
+                    ],
                 )
             ]
             failed_approaches.append(
@@ -658,7 +683,12 @@ class LLMEngine:
             conf_exp = "High confidence: GIN index missing; horizontal pod scaling explicitly flagged as unsafe under NodeMemoryPressure."
 
         # Case EVAL-012: Kafka Partition Rebalance Storm (Novel Incident)
-        elif "kafka" in logs or "rebalance" in logs or "event-streaming-pipeline" in svc or "max.poll.interval.ms" in logs:
+        elif (
+            "kafka" in logs
+            or "rebalance" in logs
+            or "event-streaming-pipeline" in svc
+            or "max.poll.interval.ms" in logs
+        ):
             hypotheses = [
                 Hypothesis(
                     rank=1,
@@ -777,7 +807,9 @@ class LLMEngine:
                     description="Re-enable exponential backoff delay and jitter on checkout HTTP client retry policy and set max retries to 2.",
                     rationale="Stops self-inflicted retry amplification storm and allows downstream user-profile service to recover.",
                     potential_risks="Temporary failed response propagation to clients during backoff.",
-                    commands_or_checks=["kubectl set env deployment/checkout-orchestrator RETRY_BACKOFF_ENABLED=true MAX_RETRIES=2"],
+                    commands_or_checks=[
+                        "kubectl set env deployment/checkout-orchestrator RETRY_BACKOFF_ENABLED=true MAX_RETRIES=2"
+                    ],
                 )
             ]
             failed_approaches.append(
@@ -791,7 +823,9 @@ class LLMEngine:
             conf_exp = "High confidence: Request amplification factor 12x and immediate retry logs confirm self-inflicted retry storm."
 
         # Case EVAL-015: Contradictory Historical Memory on Redis Eviction
-        elif "eviction" in logs or "eviction_rate" in str(incident_data.get("metrics", {})) or "volatile-lru" in symptoms:
+        elif (
+            "eviction" in logs or "eviction_rate" in str(incident_data.get("metrics", {})) or "volatile-lru" in symptoms
+        ):
             hypotheses = [
                 Hypothesis(
                     rank=1,
@@ -841,7 +875,12 @@ class LLMEngine:
             conf_exp = "High confidence: Redis eviction rate 4200 keys/sec confirms memory exhaustion; flushall explicitly avoided."
 
         # Case EVAL-016: Ambiguous Incomplete Telemetry (Requires Uncertainty)
-        elif "cross-rack" in logs or "az-east-1b" in logs or "az_cross_rack_loss" in str(incident_data.get("metrics", {})) or "sporadic" in symptoms:
+        elif (
+            "cross-rack" in logs
+            or "az-east-1b" in logs
+            or "az_cross_rack_loss" in str(incident_data.get("metrics", {}))
+            or "sporadic" in symptoms
+        ):
             hypotheses = [
                 Hypothesis(
                     rank=1,
@@ -927,11 +966,15 @@ class LLMEngine:
                         description="Activate emergency circuit breaker fallback to secondary payment provider (Stripe rail) and set 3s timeout.",
                         rationale="Fast-fails degraded third-party calls and unblocks orchestrator thread pools (INC-005).",
                         potential_risks="Secondary payment provider transaction fees.",
-                        commands_or_checks=["kubectl set env deployment/checkout-orchestrator CIRCUIT_BREAKER_ENABLED=true FALLBACK_RAIL=stripe"],
+                        commands_or_checks=[
+                            "kubectl set env deployment/checkout-orchestrator CIRCUIT_BREAKER_ENABLED=true FALLBACK_RAIL=stripe"
+                        ],
                     )
                 ]
                 confidence = "High"
-                conf_exp = "High confidence: External API latency with unbounded timeouts predictably exhausts socket pools."
+                conf_exp = (
+                    "High confidence: External API latency with unbounded timeouts predictably exhausts socket pools."
+                )
             else:
                 hypotheses = [
                     Hypothesis(
@@ -963,7 +1006,9 @@ class LLMEngine:
                         description="Increase pod memory limit from 2Gi to 4Gi and restart pods.",
                         rationale="Give pods more headroom against memory exhaustion.",
                         potential_risks="Does not resolve root cause if sockets remain hung on upstream partner.",
-                        commands_or_checks=["kubectl set resources deployment checkout-orchestrator --limits=memory=4Gi"],
+                        commands_or_checks=[
+                            "kubectl set resources deployment checkout-orchestrator --limits=memory=4Gi"
+                        ],
                     )
                 ]
                 confidence = "Medium"
@@ -1006,7 +1051,10 @@ class LLMEngine:
                         description="Restore max_db_connections configuration in Helm chart to 150 and roll out revision.",
                         rationale="Resolves connection pool thread starvation as verified in INC-001.",
                         potential_risks="Brief rolling restart of checkout-api pods.",
-                        commands_or_checks=["helm rollback checkout-api", "kubectl rollout status deployment/checkout-api"],
+                        commands_or_checks=[
+                            "helm rollback checkout-api",
+                            "kubectl rollout status deployment/checkout-api",
+                        ],
                     )
                 ]
                 confidence = "High"
@@ -1084,7 +1132,9 @@ class LLMEngine:
                         description="Scale order-fulfillment-worker replicas to 12 and restore concurrency=8.",
                         rationale="Restores total consumer throughput to drain queue backlog, matching INC-002 resolution.",
                         potential_risks="Increased concurrent downstream inventory lookups.",
-                        commands_or_checks=["kubectl patch hpa order-worker-hpa --patch '{\"spec\":{\"minReplicas\":12}}'"],
+                        commands_or_checks=[
+                            'kubectl patch hpa order-worker-hpa --patch \'{"spec":{"minReplicas":12}}\''
+                        ],
                     )
                 ]
                 confidence = "High"
@@ -1347,7 +1397,7 @@ class LLMEngine:
         }
 
 
-_llm_engine_instance: Optional[LLMEngine] = None
+_llm_engine_instance: LLMEngine | None = None
 
 
 def get_llm_engine(force_reload: bool = False) -> LLMEngine:

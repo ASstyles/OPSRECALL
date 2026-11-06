@@ -4,9 +4,8 @@ Validates 16 benchmark cases, anti-leakage isolation, and 12-dimensional scoring
 """
 
 from pathlib import Path
-import pytest
+
 from core.evaluation import EvaluationFramework
-from core.validators import EvaluationCase, EvaluationGroundTruth
 
 
 def test_load_evaluation_cases_isolated():

@@ -271,3 +271,4 @@ OPSRECALL demonstrates that persistent operational memory transforms incident re
 - On recurrent outages, memory delivers a **+25.0% boost in Top-1 root cause accuracy** and a **+40.5 point increase in resolution score**.
 - On novel outages, it safely rejects false historical precedents and acknowledges uncertainty.
 - In every case, it **protects on-call engineers from repeating past failed mitigations**.
+

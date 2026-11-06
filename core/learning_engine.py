@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from core.incident_engine import get_incident_engine
 from core.memory_manager import MemoryManager, get_memory_manager
 from core.validators import Incident, ResolutionFeedback
@@ -23,8 +24,8 @@ class LearningEngine:
 
     def __init__(
         self,
-        memory_manager: Optional[MemoryManager] = None,
-        db: Optional[DatabaseManager] = None,
+        memory_manager: MemoryManager | None = None,
+        db: DatabaseManager | None = None,
     ):
         self.memory_manager = memory_manager or get_memory_manager()
         self.db = db or get_db()
@@ -35,11 +36,11 @@ class LearningEngine:
         incident_id: str,
         verified_root_cause: str,
         successful_resolution: str,
-        failed_approaches: List[str],
+        failed_approaches: list[str],
         verification_evidence: str,
         lessons_learned: str,
         verified_by: str = "SRE On-Call Engineer",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Record verified resolution and retain knowledge into Hindsight through a multi-stage pipeline:
         Stage 1: FEEDBACK_RECEIVED
@@ -180,12 +181,12 @@ class LearningEngine:
             "message": msg,
         }
 
-    def get_learning_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_learning_history(self, limit: int = 20) -> list[dict[str, Any]]:
         """Retrieve recent human-verified incident resolutions."""
         return self.db.list_resolutions(limit=limit)
 
 
-_learning_engine_instance: Optional[LearningEngine] = None
+_learning_engine_instance: LearningEngine | None = None
 
 
 def get_learning_engine() -> LearningEngine:

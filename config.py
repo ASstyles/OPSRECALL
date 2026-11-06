@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
+
 from dotenv import find_dotenv, load_dotenv
 
 # Base Directory paths
@@ -27,7 +28,7 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def find_and_load_env() -> Optional[Path]:
+def find_and_load_env() -> Path | None:
     """
     Search for and load .env file from:
     1. Explicit OPSRECALL_ENV_FILE environment variable
@@ -97,14 +98,14 @@ class Settings:
     AUDIT_DIR: Path = AUDIT_DIR
 
     @classmethod
-    def reload(cls) -> Optional[Path]:
+    def reload(cls) -> Path | None:
         """Reload environment variables from .env and update state."""
         global _CURRENT_ENV_FILE
         _CURRENT_ENV_FILE = find_and_load_env()
         return _CURRENT_ENV_FILE
 
     @classmethod
-    def get_env_file_path(cls) -> Optional[Path]:
+    def get_env_file_path(cls) -> Path | None:
         """Return path to currently detected .env file if any."""
         global _CURRENT_ENV_FILE
         if _CURRENT_ENV_FILE and _CURRENT_ENV_FILE.exists():
@@ -169,7 +170,7 @@ class Settings:
         key = self.GROQ_API_KEY
         return bool(key and len(key) > 5 and not key.lower().startswith("your_"))
 
-    def get_diagnostics(self) -> Dict[str, Any]:
+    def get_diagnostics(self) -> dict[str, Any]:
         """Return safe, non-confidential configuration diagnostics."""
         env_path = self.get_env_file_path()
         hs_raw = os.getenv("HINDSIGHT_API_KEY", "")

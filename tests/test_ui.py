@@ -3,7 +3,6 @@ UI tests for Streamlit application using official Streamlit AppTest framework.
 Verifies all 7 sections of OPSRECALL dashboard render without exceptions.
 """
 
-import pytest
 from streamlit.testing.v1 import AppTest
 
 

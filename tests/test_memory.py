@@ -4,12 +4,14 @@ Validates structured formatting, multi-factor ranking, structured retrievals,
 duplicate prevention, contradiction detection, and API exception handling.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pytest
+from hindsight_client_api.exceptions import ApiException
+
 from core.hindsight_client import HindsightClientWrapper
 from core.memory_manager import MemoryManager
 from core.validators import Incident, RecalledMemoryItem
-from hindsight_client_api.exceptions import ApiException, UnauthorizedException
 
 
 @pytest.fixture

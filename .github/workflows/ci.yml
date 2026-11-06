@@ -29,7 +29,8 @@ jobs:
 
     - name: Lint and Code Style Check
       run: |
-        ruff check . --ignore E501,F401,F841
+        ruff check .
+        ruff format --check .
 
     - name: Verify Import Integrity
       run: |
@@ -64,3 +65,4 @@ jobs:
         python scripts/verify_groq.py
         python scripts/verify_hindsight.py
         python scripts/seed_incidents.py
+

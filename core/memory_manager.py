@@ -9,11 +9,10 @@ and enforces memory safeguards against deduplication, contradictions, and unveri
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 from core.hindsight_client import HindsightClientWrapper, get_hindsight_client
 from core.validators import (
     FailedApproachWarning,
@@ -28,10 +27,10 @@ logger = logging.getLogger("opsrecall.memory")
 class MemoryManager:
     """Manages operational memory retention, multi-factor recall ranking, and experience extraction."""
 
-    def __init__(self, client: Optional[HindsightClientWrapper] = None):
+    def __init__(self, client: HindsightClientWrapper | None = None):
         self.client = client or get_hindsight_client()
         # Local deduplication cache of document IDs and content hashes
-        self._retained_hashes: Dict[str, str] = {}
+        self._retained_hashes: dict[str, str] = {}
 
     @staticmethod
     def format_incident_for_retention(incident: Incident) -> str:
@@ -54,10 +53,12 @@ class MemoryManager:
         if incident.verified_at:
             lines.append(f"Verified At: {incident.verified_at}")
 
-        lines.extend([
-            "",
-            "OPERATIONAL SYMPTOMS:",
-        ])
+        lines.extend(
+            [
+                "",
+                "OPERATIONAL SYMPTOMS:",
+            ]
+        )
         for s in incident.symptoms:
             lines.append(f"- {s}")
 
@@ -123,9 +124,9 @@ class MemoryManager:
     @staticmethod
     def build_recall_query(
         service: str,
-        symptoms: List[str],
-        error_logs: List[str],
-        deployment_change: Optional[str] = None,
+        symptoms: list[str],
+        error_logs: list[str],
+        deployment_change: str | None = None,
     ) -> str:
         """Construct a high-signal search query from current incident symptoms and changes."""
         parts = [f"Service: {service}"]
@@ -147,8 +148,8 @@ class MemoryManager:
     def retain_incident(
         self,
         incident: Incident,
-        bank_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        bank_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Retain an incident record in Hindsight Cloud with duplicate prevention and provenance.
         """
@@ -232,10 +233,10 @@ class MemoryManager:
         query: str,
         max_tokens: int = 4096,
         budget: str = "mid",
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         tags_match: str = "any",
-        bank_id: Optional[str] = None,
-    ) -> List[RecalledMemoryItem]:
+        bank_id: str | None = None,
+    ) -> list[RecalledMemoryItem]:
         """Recall relevant incident memories from Hindsight."""
         if not self.client.is_configured:
             return []
@@ -250,7 +251,7 @@ class MemoryManager:
                 bank_id=bank_id,
             )
 
-            results: List[RecalledMemoryItem] = []
+            results: list[RecalledMemoryItem] = []
             for item in getattr(recall_response, "results", []):
                 mem_id = getattr(item, "id", "")
                 text = getattr(item, "text", "")
@@ -274,9 +275,9 @@ class MemoryManager:
                         source_inc = match.group(0)
 
                 is_verified = (
-                    "HUMAN-VERIFIED" in text or
-                    mem_meta.get("is_verified") == "True" or
-                    "verified-resolution" in mem_tags
+                    "HUMAN-VERIFIED" in text
+                    or mem_meta.get("is_verified") == "True"
+                    or "verified-resolution" in mem_tags
                 )
 
                 results.append(
@@ -301,12 +302,12 @@ class MemoryManager:
 
     def rank_and_structure_retrievals(
         self,
-        recalled_memories: List[RecalledMemoryItem],
+        recalled_memories: list[RecalledMemoryItem],
         current_service: str,
-        current_symptoms: List[str],
-        current_errors: List[str],
-        current_change: Optional[str] = None,
-    ) -> List[StructuredRetrievalResult]:
+        current_symptoms: list[str],
+        current_errors: list[str],
+        current_change: str | None = None,
+    ) -> list[StructuredRetrievalResult]:
         """
         Multi-factor ranking and explanation synthesis for recalled memories.
         Combines:
@@ -317,7 +318,7 @@ class MemoryManager:
         5. Negative experience value (failed fix presence)
         6. Domain disambiguation penalty (distinguishing lookalike incidents)
         """
-        structured: List[StructuredRetrievalResult] = []
+        structured: list[StructuredRetrievalResult] = []
         target_tokens = set()
         for s in current_symptoms:
             target_tokens.update([w.lower() for w in re.findall(r"[a-zA-Z0-9_\-\.]+", s) if len(w) > 3])
@@ -326,7 +327,9 @@ class MemoryManager:
         if current_change:
             target_tokens.update([w.lower() for w in re.findall(r"[a-zA-Z0-9_\-\.]+", current_change) if len(w) > 3])
 
-        query_str = (" ".join(current_symptoms) + " " + " ".join(current_errors) + " " + str(current_change or "")).lower()
+        query_str = (
+            " ".join(current_symptoms) + " " + " ".join(current_errors) + " " + str(current_change or "")
+        ).lower()
 
         for mem in recalled_memories:
             text = mem.text
@@ -339,7 +342,7 @@ class MemoryManager:
             title = title_match.group(1).strip() if title_match else f"Incident {inc_id}"
 
             # Factor 1: Token / Symptom Overlap
-            mem_tokens = set([w.lower() for w in re.findall(r"[a-zA-Z0-9_\-\.]+", text) if len(w) > 3])
+            mem_tokens = {w.lower() for w in re.findall(r"[a-zA-Z0-9_\-\.]+", text) if len(w) > 3}
             overlap = len(target_tokens.intersection(mem_tokens))
             symptom_score = min(1.0, overlap / max(1, len(target_tokens) * 0.5))
 
@@ -389,12 +392,12 @@ class MemoryManager:
                 disambiguation_penalty = 0.5
 
             raw_composite = (
-                (symptom_score * 0.35) +
-                (min(1.0, error_sig_score) * 0.35) +
-                service_score +
-                verification_boost +
-                negative_exp_score -
-                disambiguation_penalty
+                (symptom_score * 0.35)
+                + (min(1.0, error_sig_score) * 0.35)
+                + service_score
+                + verification_boost
+                + negative_exp_score
+                - disambiguation_penalty
             )
             final_relevance = max(0.0, min(1.0, raw_composite))
 
@@ -468,10 +471,10 @@ class MemoryManager:
 
     def extract_failed_approaches(
         self,
-        recalled_memories: List[RecalledMemoryItem],
-    ) -> List[FailedApproachWarning]:
+        recalled_memories: list[RecalledMemoryItem],
+    ) -> list[FailedApproachWarning]:
         """Scan recalled memories to isolate historical failed fixes to avoid."""
-        warnings: List[FailedApproachWarning] = []
+        warnings: list[FailedApproachWarning] = []
         seen = set()
 
         for mem in recalled_memories:
@@ -479,11 +482,23 @@ class MemoryManager:
             src = mem.source_incident_id or mem.document_id or "Historical Incident"
 
             lower_text = text.lower()
-            if any(term in lower_text for term in ["failed", "did not solve", "unsuccessful", "exacerbated", "worsened", "do not repeat"]):
+            if any(
+                term in lower_text
+                for term in ["failed", "did not solve", "unsuccessful", "exacerbated", "worsened", "do not repeat"]
+            ):
                 for line in text.splitlines():
                     l_lower = line.lower()
-                    if ("failed" in l_lower or "do not" in l_lower or "unsuccessful" in l_lower) and len(line.strip()) > 10:
-                        clean_line = line.strip().lstrip("-* ").replace("FAILED FIX:", "").replace("FAILED:", "").replace("FAILED MITIGATION ATTEMPTS (DO NOT REPEAT):", "").strip()
+                    if ("failed" in l_lower or "do not" in l_lower or "unsuccessful" in l_lower) and len(
+                        line.strip()
+                    ) > 10:
+                        clean_line = (
+                            line.strip()
+                            .lstrip("-* ")
+                            .replace("FAILED FIX:", "")
+                            .replace("FAILED:", "")
+                            .replace("FAILED MITIGATION ATTEMPTS (DO NOT REPEAT):", "")
+                            .strip()
+                        )
                         if clean_line and clean_line not in seen and not clean_line.startswith("==="):
                             seen.add(clean_line)
                             warnings.append(
@@ -500,8 +515,8 @@ class MemoryManager:
     def detect_contradictions(
         self,
         proposed_action: str,
-        recalled_memories: List[RecalledMemoryItem],
-    ) -> List[str]:
+        recalled_memories: list[RecalledMemoryItem],
+    ) -> list[str]:
         """
         Check if a proposed action or hypothesis contradicts known operational memories.
         For example, proposing to flush Redis when prior memory INC-004 proved it causes DB collapse.
@@ -523,9 +538,9 @@ class MemoryManager:
         self,
         query: str,
         budget: str = "mid",
-        context: Optional[str] = None,
-        bank_id: Optional[str] = None,
-    ) -> Optional[str]:
+        context: str | None = None,
+        bank_id: str | None = None,
+    ) -> str | None:
         """Run Hindsight reflection to identify macro incident patterns."""
         if not self.client.is_configured:
             return None
@@ -543,7 +558,7 @@ class MemoryManager:
             return None
 
 
-_memory_manager_instance: Optional[MemoryManager] = None
+_memory_manager_instance: MemoryManager | None = None
 
 
 def get_memory_manager() -> MemoryManager:

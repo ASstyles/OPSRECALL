@@ -1,0 +1,74 @@
+{
+  "top_1_root_cause_accuracy": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 75.0
+  },
+  "top_3_root_cause_accuracy": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 100.0
+  },
+  "causal_reasoning_quality": {
+    "memory_enabled": 76.2,
+    "memory_disabled": 76.2
+  },
+  "evidence_grounding_rate": {
+    "memory_enabled": 96.2,
+    "memory_disabled": 98.7
+  },
+  "retrieval_precision_pct": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 0.0
+  },
+  "retrieval_recall_pct": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 0.0
+  },
+  "mean_reciprocal_rank": {
+    "memory_enabled": 1.0,
+    "memory_disabled": 0.0
+  },
+  "relevant_memory_retrieval_rate": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 68.8
+  },
+  "failed_mitigation_avoidance_rate": {
+    "memory_enabled": 31.2,
+    "memory_disabled": 37.5
+  },
+  "recommendation_action_quality": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 93.8
+  },
+  "recommendation_safety_rate": {
+    "memory_enabled": 93.8,
+    "memory_disabled": 93.8
+  },
+  "false_historical_recall_rate": {
+    "memory_enabled": 0.0,
+    "memory_disabled": 0.0
+  },
+  "novel_incident_handling_rate": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 100.0
+  },
+  "brier_score": {
+    "memory_enabled": 0.047,
+    "memory_disabled": 0.148
+  },
+  "expected_calibration_error": {
+    "memory_enabled": 0.185,
+    "memory_disabled": 0.089
+  },
+  "investigation_consistency_rate": {
+    "memory_enabled": 84.2,
+    "memory_disabled": 85.6
+  },
+  "human_verification_compliance_rate": {
+    "memory_enabled": 100.0,
+    "memory_disabled": 100.0
+  },
+  "composite_score": {
+    "memory_enabled": 91.1,
+    "memory_disabled": 79.6
+  }
+}

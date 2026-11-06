@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -73,7 +72,7 @@ def main() -> int:
         return 0
 
     try:
-        from groq import Groq, AuthenticationError, APIError
+        from groq import APIError, AuthenticationError, Groq
 
         client = Groq(api_key=settings.GROQ_API_KEY)
         start_time = time.time()
@@ -97,10 +96,7 @@ def main() -> int:
             print(f"   -> [WARN] Configured model '{target_model}' not found in account model list.")
             # Check recommended non-deprecated alternatives
             deprecated_tokens = ["llama-3.3-70b-versatile", "qwen/qwen3.6-27b"]
-            valid_candidates = [
-                m for m in available_model_ids
-                if not any(dep in m for dep in deprecated_tokens)
-            ]
+            valid_candidates = [m for m in available_model_ids if not any(dep in m for dep in deprecated_tokens)]
             selected_model = None
             for c in ["openai/gpt-oss-120b", "llama-3.1-8b-instant"]:
                 if c in valid_candidates:
@@ -117,8 +113,11 @@ def main() -> int:
         # 2. Run Smoke Test with JSON Mode
         print(f"\n2. Testing Structured JSON Chat Completion with '{selected_model}'...")
         test_messages = [
-            {"role": "system", "content": "You are a test assistant. You must respond with a JSON object containing 'status' and 'model'."},
-            {"role": "user", "content": "Ping test: confirm operational readiness."}
+            {
+                "role": "system",
+                "content": "You are a test assistant. You must respond with a JSON object containing 'status' and 'model'.",
+            },
+            {"role": "user", "content": "Ping test: confirm operational readiness."},
         ]
 
         response = client.chat.completions.create(
@@ -136,7 +135,9 @@ def main() -> int:
         report["status"] = "CONNECTED"
         report["json_mode_verified"] = True
         report["latency_ms"] = latency_ms
-        report["message"] = f"Successfully verified Groq model '{selected_model}' with structured JSON support in {latency_ms}ms."
+        report["message"] = (
+            f"Successfully verified Groq model '{selected_model}' with structured JSON support in {latency_ms}ms."
+        )
 
         print(f"   -> [OK] Live completion succeeded! ({latency_ms}ms)")
         print(f"   -> Model used: {response.model}")

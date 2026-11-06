@@ -152,11 +152,13 @@ def extract_failed_approaches(recalled_memories: List[RecalledMemoryItem]) -> Li
         if "failed" in mem.text.lower():
             for line in mem.text.splitlines():
                 if "failed" in line.lower() and len(line.strip()) > 10:
-                    warnings.append(FailedApproachWarning(
-                        approach=line.strip(),
-                        why_failed="Identified as unsuccessful in prior incident investigation.",
-                        historical_source_incident=mem.source_incident_id or "Historical Record"
-                    ))
+                    warnings.append(
+                        FailedApproachWarning(
+                            approach=line.strip(),
+                            why_failed="Identified as unsuccessful in prior incident investigation.",
+                            historical_source_incident=mem.source_incident_id or "Historical Record",
+                        )
+                    )
     return warnings
 ```
 

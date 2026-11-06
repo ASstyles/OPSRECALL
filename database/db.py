@@ -10,15 +10,16 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 from config import settings
-from core.validators import Incident, InvestigationResult, ResolutionFeedback, CaseEvaluationScore
+from core.validators import CaseEvaluationScore, Incident, InvestigationResult, ResolutionFeedback
 
 
 class DatabaseManager:
     """Manages SQLite connection and schemas for OPSRECALL local audit records."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         self.db_path = Path(db_path or settings.SQLITE_DB_PATH)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_schema()
@@ -66,13 +67,15 @@ class DatabaseManager:
                     with conn:
                         func(conn)
                         from datetime import datetime, timezone
+
                         now_str = datetime.now(timezone.utc).isoformat()
                         conn.execute(
                             "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
-                            (version, name, now_str)
+                            (version, name, now_str),
                         )
                 except Exception as e:
                     import logging
+
                     logging.getLogger("opsrecall.db").error(f"Migration {version} ({name}) failed: {e}")
                     raise RuntimeError(f"Database migration {version} ({name}) failed: {e}") from e
 
@@ -194,47 +197,63 @@ class DatabaseManager:
 
     def _migration_v2_incident_verification(self, conn: sqlite3.Connection) -> None:
         """Version 2: Add verification and content hash columns to incidents."""
-        self._migrate_table(conn, "incidents", [
-            ("is_verified", "INTEGER DEFAULT 0"),
-            ("verified_by", "TEXT"),
-            ("verified_at", "TEXT"),
-            ("content_hash", "TEXT"),
-        ])
+        self._migrate_table(
+            conn,
+            "incidents",
+            [
+                ("is_verified", "INTEGER DEFAULT 0"),
+                ("verified_by", "TEXT"),
+                ("verified_at", "TEXT"),
+                ("content_hash", "TEXT"),
+            ],
+        )
 
     def _migration_v3_investigation_structured(self, conn: sqlite3.Connection) -> None:
         """Version 3: Add structured retrieval and contradiction tracking to investigations."""
-        self._migrate_table(conn, "investigations", [
-            ("retrieval_mode_label", "TEXT DEFAULT 'DISABLED'"),
-            ("structured_retrievals", "TEXT"),
-            ("previous_failed_approaches", "TEXT"),
-            ("memory_contradictions_detected", "TEXT"),
-        ])
+        self._migrate_table(
+            conn,
+            "investigations",
+            [
+                ("retrieval_mode_label", "TEXT DEFAULT 'DISABLED'"),
+                ("structured_retrievals", "TEXT"),
+                ("previous_failed_approaches", "TEXT"),
+                ("memory_contradictions_detected", "TEXT"),
+            ],
+        )
 
     def _migration_v4_resolution_multistage(self, conn: sqlite3.Connection) -> None:
         """Version 4: Add 5-stage feedback lifecycle and conflict columns to resolutions."""
-        self._migrate_table(conn, "resolutions", [
-            ("status", "TEXT DEFAULT 'FEEDBACK_RECEIVED'"),
-            ("error_message", "TEXT"),
-            ("conflict_detected", "INTEGER DEFAULT 0"),
-            ("conflict_details", "TEXT"),
-        ])
+        self._migrate_table(
+            conn,
+            "resolutions",
+            [
+                ("status", "TEXT DEFAULT 'FEEDBACK_RECEIVED'"),
+                ("error_message", "TEXT"),
+                ("conflict_detected", "INTEGER DEFAULT 0"),
+                ("conflict_details", "TEXT"),
+            ],
+        )
 
     def _migration_v5_evaluation_16d(self, conn: sqlite3.Connection) -> None:
         """Version 5: Add 16-dimensional benchmark columns to evaluation_details."""
-        self._migrate_table(conn, "evaluation_details", [
-            ("top_1_root_cause_hit", "INTEGER DEFAULT 0"),
-            ("is_safe_recommendation", "INTEGER DEFAULT 1"),
-            ("causal_reasoning_score", "REAL DEFAULT 0.0"),
-            ("evidence_grounding_score", "REAL DEFAULT 0.0"),
-            ("retrieval_precision", "REAL DEFAULT 0.0"),
-            ("retrieval_recall", "REAL DEFAULT 0.0"),
-            ("reciprocal_rank", "REAL DEFAULT 0.0"),
-            ("action_quality_score", "REAL DEFAULT 0.0"),
-            ("confidence_calibration_error", "REAL DEFAULT 0.0"),
-            ("brier_score", "REAL DEFAULT 0.0"),
-        ])
+        self._migrate_table(
+            conn,
+            "evaluation_details",
+            [
+                ("top_1_root_cause_hit", "INTEGER DEFAULT 0"),
+                ("is_safe_recommendation", "INTEGER DEFAULT 1"),
+                ("causal_reasoning_score", "REAL DEFAULT 0.0"),
+                ("evidence_grounding_score", "REAL DEFAULT 0.0"),
+                ("retrieval_precision", "REAL DEFAULT 0.0"),
+                ("retrieval_recall", "REAL DEFAULT 0.0"),
+                ("reciprocal_rank", "REAL DEFAULT 0.0"),
+                ("action_quality_score", "REAL DEFAULT 0.0"),
+                ("confidence_calibration_error", "REAL DEFAULT 0.0"),
+                ("brier_score", "REAL DEFAULT 0.0"),
+            ],
+        )
 
-    def _migrate_table(self, conn: sqlite3.Connection, table_name: str, columns: List[Tuple[str, str]]) -> None:
+    def _migrate_table(self, conn: sqlite3.Connection, table_name: str, columns: list[tuple[str, str]]) -> None:
         """Add missing columns to an existing SQLite table if not present."""
         cursor = conn.cursor()
         cursor.execute(f"PRAGMA table_info({table_name})")
@@ -291,7 +310,7 @@ class DatabaseManager:
             )
             conn.commit()
 
-    def get_incident(self, incident_id: str) -> Optional[Incident]:
+    def get_incident(self, incident_id: str) -> Incident | None:
         """Fetch an incident by its ID."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -301,7 +320,7 @@ class DatabaseManager:
                 return None
             return self._row_to_incident(row)
 
-    def list_incidents(self) -> List[Incident]:
+    def list_incidents(self) -> list[Incident]:
         """Return all stored incidents."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -349,7 +368,7 @@ class DatabaseManager:
             )
             conn.commit()
 
-    def list_investigations(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_investigations(self, limit: int = 20) -> list[dict[str, Any]]:
         """List recent investigations."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -398,7 +417,7 @@ class DatabaseManager:
             conn.commit()
             return cursor.lastrowid
 
-    def list_resolutions(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_resolutions(self, limit: int = 20) -> list[dict[str, Any]]:
         """List human verified resolutions."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -426,8 +445,8 @@ class DatabaseManager:
         avoidance_disabled: float,
         avg_score_enabled: float,
         avg_score_disabled: float,
-        summary_json: Dict[str, Any],
-        details: List[CaseEvaluationScore],
+        summary_json: dict[str, Any],
+        details: list[CaseEvaluationScore],
     ) -> None:
         """Persist an evaluation run and its detailed case scores."""
         with self.get_connection() as conn:
@@ -494,7 +513,7 @@ class DatabaseManager:
                 )
             conn.commit()
 
-    def get_latest_evaluation_run(self) -> Optional[Dict[str, Any]]:
+    def get_latest_evaluation_run(self) -> dict[str, Any] | None:
         """Fetch the most recent evaluation benchmark summary."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -518,32 +537,34 @@ class DatabaseManager:
             affected_service=row["affected_service"],
             incident_timestamp=row["incident_timestamp"],
             severity=row["severity"],
-            symptoms=json.loads(row["symptoms"]),
-            error_logs=json.loads(row["error_logs"]),
-            metrics=json.loads(row["metrics"]),
+            symptoms=json.loads(row["symptoms"] or "[]"),
+            error_logs=json.loads(row["error_logs"] or "[]"),
+            metrics=json.loads(row["metrics"] or "{}"),
             deployment_id=row["deployment_id"],
             deployment_or_change=row["deployment_or_change"],
             suspected_cause=row["suspected_cause"],
             actual_verified_root_cause=row["actual_verified_root_cause"],
-            is_verified=bool(row["is_verified"]) if "is_verified" in row.keys() else bool(row["actual_verified_root_cause"]),
+            is_verified=bool(row["is_verified"])
+            if "is_verified" in row.keys()
+            else bool(row["actual_verified_root_cause"]),
             verified_by=row["verified_by"] if "verified_by" in row.keys() else None,
             verified_at=row["verified_at"] if "verified_at" in row.keys() else None,
-            diagnostic_actions_attempted=json.loads(row["diagnostic_actions_attempted"]),
-            failed_mitigation_attempts=json.loads(row["failed_mitigation_attempts"]),
+            diagnostic_actions_attempted=json.loads(row["diagnostic_actions_attempted"] or "[]"),
+            failed_mitigation_attempts=json.loads(row["failed_mitigation_attempts"] or "[]"),
             successful_mitigation=row["successful_mitigation"],
             resolution=row["resolution"],
             resolution_outcome=row["resolution_outcome"],
             verification_evidence=row["verification_evidence"],
             lessons_learned=row["lessons_learned"],
             content_hash=row["content_hash"] if "content_hash" in row.keys() else None,
-            data_type=row["data_type"],
+            data_type=row["data_type"] if "data_type" in row.keys() else "INCIDENT_POSTMORTEM",
         )
 
 
-_db_instance: Optional[DatabaseManager] = None
+_db_instance: DatabaseManager | None = None
 
 
-def get_db(db_path: Optional[str] = None) -> DatabaseManager:
+def get_db(db_path: str | None = None) -> DatabaseManager:
     """Return singleton DatabaseManager instance."""
     global _db_instance
     if _db_instance is None or db_path is not None:
