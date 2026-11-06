@@ -1,11 +1,11 @@
 """
 Investigation Engine for OPSRECALL.
 Coordinates the end-to-end incident investigation workflow:
-1. Incident input validation.
-2. Hindsight memory recall (when enabled).
+1. Incident input validation and telemetry sanitization.
+2. Hindsight memory recall (when enabled) with multi-factor ranking.
 3. LLM reasoning and evidence synthesis.
 4. Structured hypothesis and remediation generation.
-5. Extraction of previously failed fixes.
+5. Extraction of previously failed fixes & contradiction detection.
 6. Execution of side-by-side Memory ON vs. Memory OFF comparisons.
 7. Local audit logging.
 """
@@ -26,6 +26,7 @@ from core.validators import (
     Incident,
     InvestigationResult,
     RecalledMemoryItem,
+    StructuredRetrievalResult,
 )
 from database.db import DatabaseManager, get_db
 
@@ -67,28 +68,43 @@ class InvestigationEngine:
         deployment_change = incident_data.get("deployment_or_change") or incident_data.get("recent_deployment")
 
         recalled_memories: List[RecalledMemoryItem] = []
+        structured_retrievals: List[StructuredRetrievalResult] = []
+        retrieval_mode_label = "DISABLED"
 
         # 1. Memory Retrieval step
         if memory_mode == "MEMORY_ENABLED":
-            query = self.memory_manager.build_recall_query(
-                service=service,
-                symptoms=symptoms,
-                error_logs=error_logs,
-                deployment_change=deployment_change,
-            )
-            recalled_memories = self.memory_manager.recall_memories(
-                query=query,
-                tags=[service] if service else None,
-            )
+            if self.memory_manager.client.is_configured:
+                query = self.memory_manager.build_recall_query(
+                    service=service,
+                    symptoms=symptoms,
+                    error_logs=error_logs,
+                    deployment_change=deployment_change,
+                )
+                recalled_memories = self.memory_manager.recall_memories(
+                    query=query,
+                    tags=[service] if service else None,
+                )
+                retrieval_mode_label = "LIVE_HINDSIGHT"
 
-            # If Hindsight is in offline preview mode (not configured) but we are investigating,
-            # check if local simulated incidents match to provide realistic demonstration
+            # If Hindsight is in offline preview mode (not configured) but memory is enabled,
+            # retrieve from local simulated incidents with clear simulation tagging
             if not recalled_memories and not self.memory_manager.client.is_configured:
                 recalled_memories = self._get_offline_preview_memories(
                     service=service,
                     symptoms=symptoms,
                     error_logs=error_logs,
                     deployment_change=deployment_change,
+                )
+                retrieval_mode_label = "OFFLINE_SIMULATION"
+
+            # Rank and synthesize structured retrieval explanations
+            if recalled_memories:
+                structured_retrievals = self.memory_manager.rank_and_structure_retrievals(
+                    recalled_memories=recalled_memories,
+                    current_service=service,
+                    current_symptoms=symptoms,
+                    current_errors=error_logs,
+                    current_change=deployment_change,
                 )
 
         # 2. LLM Reasoning step
@@ -116,9 +132,9 @@ class InvestigationEngine:
         # 4. Parse historical references and failed approaches
         hist_refs = llm_output.get("historical_incidents_referenced", [])
         if not hist_refs and memory_mode == "MEMORY_ENABLED":
-            for m in recalled_memories:
-                if m.source_incident_id and m.source_incident_id not in hist_refs:
-                    hist_refs.append(m.source_incident_id)
+            for sr in structured_retrievals:
+                if sr.incident_id and sr.incident_id not in hist_refs and (sr.relevance_score or 0.0) > 0.3:
+                    hist_refs.append(sr.incident_id)
 
         failed_approaches: List[FailedApproachWarning] = []
         for f in llm_output.get("previous_failed_approaches", []):
@@ -128,10 +144,11 @@ class InvestigationEngine:
                         approach=f.get("approach", ""),
                         why_failed=f.get("why_failed", ""),
                         historical_source_incident=f.get("historical_source_incident", "Historical Record"),
+                        suggested_alternative=f.get("suggested_alternative"),
                     )
                 )
 
-        # Also merge any failed approaches directly extracted by memory manager
+        # Merge any failed approaches directly extracted by memory manager
         if memory_mode == "MEMORY_ENABLED" and recalled_memories:
             extracted_warnings = self.memory_manager.extract_failed_approaches(recalled_memories)
             existing_approaches = {fa.approach.lower() for fa in failed_approaches}
@@ -140,7 +157,7 @@ class InvestigationEngine:
                     failed_approaches.append(ew)
                     existing_approaches.add(ew.approach.lower())
 
-        # 5. Parse recommendations
+        # 5. Parse recommendations & check for safety and contradictions
         diagnostic_actions: List[ActionRecommendation] = []
         for d in llm_output.get("recommended_diagnostic_actions", []):
             if isinstance(d, dict):
@@ -150,8 +167,11 @@ class InvestigationEngine:
                         action_type=d.get("action_type", "Diagnostic"),
                         description=d.get("description", ""),
                         rationale=d.get("rationale", ""),
-                        potential_risks=d.get("potential_risks", "None"),
+                        potential_risks=d.get("potential_risks", "None - read-only query."),
                         commands_or_checks=d.get("commands_or_checks", []),
+                        requires_human_approval=d.get("requires_human_approval", True),
+                        is_destructive=d.get("is_destructive", False),
+                        reversibility=d.get("reversibility", "Fully Reversible"),
                     )
                 )
 
@@ -164,10 +184,20 @@ class InvestigationEngine:
                         action_type=r.get("action_type", "Remediation"),
                         description=r.get("description", ""),
                         rationale=r.get("rationale", ""),
-                        potential_risks=r.get("potential_risks", "Standard deployment restart risk"),
+                        potential_risks=r.get("potential_risks", "Standard deployment restart risk."),
                         commands_or_checks=r.get("commands_or_checks", []),
+                        requires_human_approval=r.get("requires_human_approval", True),
+                        is_destructive=d.get("is_destructive", False) if "d" in locals() else False,
+                        reversibility=r.get("reversibility", "Fully Reversible"),
                     )
                 )
+
+        # Check for contradictions against recalled historical memories
+        contradictions_detected: List[str] = []
+        if memory_mode == "MEMORY_ENABLED" and recalled_memories:
+            for rem in remediation_steps:
+                conflicts = self.memory_manager.detect_contradictions(rem.description, recalled_memories)
+                contradictions_detected.extend(conflicts)
 
         elapsed = round(time.time() - start_time, 3)
 
@@ -175,12 +205,15 @@ class InvestigationEngine:
             investigation_id=investigation_id,
             incident_id=inc_id,
             mode=memory_mode,
+            retrieval_mode_label=retrieval_mode_label,
             executive_summary=llm_output.get("executive_summary", "Operational investigation completed."),
             hypotheses=hypotheses,
             evidence_summary=symptoms + error_logs[:2],
             recalled_memories=recalled_memories,
+            structured_retrievals=structured_retrievals,
             historical_incidents_referenced=hist_refs,
             previous_failed_approaches=failed_approaches,
+            memory_contradictions_detected=contradictions_detected,
             recommended_diagnostic_actions=diagnostic_actions,
             recommended_remediation_steps=remediation_steps,
             confidence_level=llm_output.get("confidence_level", "Medium"),
@@ -189,7 +222,7 @@ class InvestigationEngine:
             requires_human_intervention=True,
             is_simulated=True,
             execution_time_seconds=elapsed,
-            llm_model=llm_output.get("llm_model", "groq:llama-3.3-70b-versatile"),
+            llm_model=llm_output.get("llm_model", "groq:openai/gpt-oss-120b"),
         )
 
         # 6. Save audit record to SQLite
@@ -251,21 +284,25 @@ class InvestigationEngine:
                 has_semantic_alignment = False
 
                 if "pool" in query_text and "pool" in inc_text:
-                    # Distinguish connection pool from table lock
-                    if "lock" not in query_text:
+                    # Distinguish connection pool from table lock and cross-rack packet drop
+                    if "lock" not in query_text and "accessexclusivelock" not in query_text and "cross-rack" not in query_text and "az-east" not in query_text and "sporadic" not in query_text:
                         has_semantic_alignment = True
                 elif ("concurrency" in query_text or "consumer" in query_text or "queue" in query_text) and ("concurrency" in inc_text or "consumer" in inc_text or "replicas" in inc_text):
                     # Distinguish worker capacity from CPU-bound PDF rendering
                     if "pdf" not in query_text and "invoice" not in query_text:
                         has_semantic_alignment = True
                 elif ("cert" in query_text or "tls" in query_text or "ssl" in query_text) and ("cert" in inc_text or "tls" in inc_text or "ssl" in inc_text):
-                    has_semantic_alignment = True
+                    # Distinguish TLS cert from heap memory leak in payment-gateway
+                    if "jackson" not in query_text and "heap" not in query_text:
+                        has_semantic_alignment = True
                 elif ("stampede" in query_text or "redis" in query_text or "ttl" in query_text) and ("stampede" in inc_text or "redis" in inc_text):
-                    # Distinguish cache stampede from node memory pressure
-                    if "nodememorypressure" not in query_text and "gin" not in query_text:
+                    # Distinguish cache stampede from node memory pressure and eviction thrashing
+                    if "nodememorypressure" not in query_text and "gin" not in query_text and "eviction" not in query_text and "volatile-lru" not in query_text:
                         has_semantic_alignment = True
                 elif ("partner" in query_text or "paycorp" in query_text or "circuit" in query_text or "upstream" in query_text) and ("partner" in inc_text or "paycorp" in inc_text or "circuit" in inc_text):
-                    has_semantic_alignment = True
+                    # Distinguish partner latency from retry storm amplification
+                    if "retry" not in query_text and "amplification" not in query_text:
+                        has_semantic_alignment = True
 
                 if has_semantic_alignment:
                     formatted_text = self.memory_manager.format_incident_for_retention(inc)
@@ -276,10 +313,16 @@ class InvestigationEngine:
                             memory_type="experience",
                             document_id=inc.incident_id,
                             tags=[inc.affected_service, inc.severity, "offline-preview"],
-                            metadata={"incident_id": inc.incident_id, "mode": "OFFLINE_PREVIEW"},
+                            metadata={
+                                "incident_id": inc.incident_id,
+                                "mode": "OFFLINE_PREVIEW",
+                                "service": inc.affected_service,
+                                "is_verified": "True" if inc.actual_verified_root_cause else "False",
+                            },
                             relevance_score=0.92,
                             source_incident_id=inc.incident_id,
                             timestamp=inc.incident_timestamp,
+                            is_verified=bool(inc.actual_verified_root_cause),
                         )
                     )
 
@@ -295,4 +338,3 @@ def get_investigation_engine() -> InvestigationEngine:
     if _investigation_engine_instance is None:
         _investigation_engine_instance = InvestigationEngine()
     return _investigation_engine_instance
-

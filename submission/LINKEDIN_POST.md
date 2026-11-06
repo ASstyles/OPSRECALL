@@ -4,7 +4,7 @@ I built OPSRECALL: an incident intelligence agent giving SREs change-aware opera
 
 Rather than generic search, OPSRECALL correlates deployments, symptoms, and verified fixes—explicitly warning on-call engineers against repeating past failed mitigations.
 
-Across 12 benchmark cases, memory boosted root cause accuracy by +16.7% and improved recurrent outage resolution scores by +25.0 points (75.0 -> 100.0).
+Across 16 benchmark cases evaluated across 12 dimensions, memory boosted Top-1 root cause accuracy by +25.0% and improved recurrent outage resolution scores by +40.5 points (59.5 -> 100.0) with zero false recalls.
 
 Inspect the architecture, test suite, and evaluation data:
 https://github.com/your-username/OPSRECALL

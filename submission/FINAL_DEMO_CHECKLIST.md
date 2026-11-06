@@ -12,11 +12,11 @@ Use this repeatable checklist to verify, demonstrate, and judge OPSRECALL from t
   ```
   *(Verified on Python 3.10+ / Python 3.14 on Windows).*
 
-- [ ] **Run Automated Test Suite (35 Tests)**:
+- [ ] **Run Automated Test Suite (45 Tests)**:
   ```bash
   python -m pytest -q
   ```
-  *Expected Output: `32 passed, 3 skipped` (0 failures).*
+  *Expected Output: `42 passed, 3 skipped` (0 failures).*
 
 - [ ] **Run UI Headless Navigation Tests (7 Pages)**:
   ```bash
@@ -84,11 +84,11 @@ Use this repeatable checklist to verify, demonstrate, and judge OPSRECALL from t
 - [ ] Click **💾 Confirm Resolution & Retain into Hindsight**.
 - [ ] Verify the success confirmation banner and inspect the local audit timeline below.
 
-### Step 6: 12-Case Benchmark Suite
+### Step 6: 16-Case Benchmark Suite
 - [ ] Navigate to **Evaluation Lab**.
 - [ ] Click **▶ Run Full Benchmark Suite**.
 - [ ] Verify:
-  - Evaluates 12 cases across 7 dimensions with isolated ground truth.
-  - Plotly dark bar chart renders comparisons across all 12 cases.
-  - Shows +25.0 points gain on recurrent incidents and 100% failed fix avoidance.
+  - Evaluates 16 cases across 12 dimensions with isolated ground truth.
+  - Plotly dark bar chart renders comparisons across all 16 cases.
+  - Shows +25.0% Top-1 root cause gain (+40.5 points on recurrent incidents) and 100% failed fix avoidance.
 

@@ -39,6 +39,13 @@ This document provides a candid, technically honest assessment of current limita
 
 ---
 
+## 6. Prompt Injection & Input Boundary Protections
+
+- **Untrusted Telemetry Isolation**: Because incident logs may contain arbitrary external strings or attacker-crafted payloads (e.g., in HTTP User-Agent or query parameters), OPSRECALL fences all raw telemetry inside `<incident_telemetry_untrusted>` tags. System prompts instruct the LLM that content within these tags is inert telemetry to be diagnosed rather than instructions to execute.
+- **Redaction Heuristics**: Automated regex filters strip JWT Bearer tokens, AWS secrets, and password fields. In high-security environments, enterprise data loss prevention (DLP) proxies should run upstream of the investigation layer.
+
+---
+
 ## 7. BAND AI Desktop Competition Requirements & Execution Boundaries
 
 - **Execution Model**: OPSRECALL is architected as a local Python-based application paired with a local Streamlit web application interface running on `http://localhost:8501`. In the BAND AI Desktop evaluation environment, the application executes locally via `python -m streamlit run app.py` on the Windows desktop host and renders directly within any local web browser or embedded desktop webview.

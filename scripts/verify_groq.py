@@ -3,6 +3,8 @@ Groq Model Verification and Smoke Test Script for OPSRECALL.
 Queries the live Groq models endpoint (GET https://api.groq.com/openai/v1/models),
 verifies model availability for the configured account, tests JSON mode support,
 and validates structured reasoning output.
+Generates machine-readable verification reports in outputs/audit/GROQ_VERIFICATION_REPORT.json.
+
 Usage:
     python scripts/verify_groq.py
 """
@@ -12,12 +14,30 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import settings
+
+
+def finalize_groq_report(report: dict) -> dict:
+    """Save machine-readable verification report to disk."""
+    out_dir = settings.AUDIT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = out_dir / "GROQ_VERIFICATION_REPORT.json"
+
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        print(f"\n[INFO] Machine-readable report written to: {report_path}")
+    except Exception as e:
+        print(f"[WARN] Failed writing report to {report_path}: {e}")
+
+    return report
 
 
 def main() -> int:
@@ -28,6 +48,18 @@ def main() -> int:
     print(f"API Key Status:          {'[CONFIGURED]' if settings.is_groq_configured() else '[MISSING]'}")
     print("--------------------------------------------------------------------------------")
 
+    report = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "target_model": settings.GROQ_MODEL,
+        "is_configured": settings.is_groq_configured(),
+        "status": "NOT_CONFIGURED",
+        "selected_model": None,
+        "available_models_count": 0,
+        "json_mode_verified": False,
+        "latency_ms": None,
+        "message": None,
+    }
+
     if not settings.is_groq_configured():
         print("[INFO] GROQ_API_KEY is not configured in .env or environment.")
         print("       OPSRECALL operates in offline rule-based reasoning mode without live keys.")
@@ -36,17 +68,21 @@ def main() -> int:
         print("         2. Set GROQ_API_KEY in your .env file.")
         print("         3. Default recommended production model: openai/gpt-oss-120b")
         print("================================================================================")
+        report["message"] = "GROQ_API_KEY is not configured. System is operating in offline expert mode."
+        finalize_groq_report(report)
         return 0
 
     try:
         from groq import Groq, AuthenticationError, APIError
 
         client = Groq(api_key=settings.GROQ_API_KEY)
+        start_time = time.time()
 
         # 1. Query models endpoint
         print("1. Querying Groq Account Models Endpoint (GET /openai/v1/models)...")
         models_page = client.models.list()
         available_model_ids = [m.id for m in models_page.data]
+        report["available_models_count"] = len(available_model_ids)
 
         print(f"   -> Retrieved {len(available_model_ids)} available models.")
         print(f"   -> Sample available models: {', '.join(available_model_ids[:6])}")
@@ -76,6 +112,8 @@ def main() -> int:
                 selected_model = valid_candidates[0]
                 print(f"   -> Falling back to first non-deprecated model: '{selected_model}'")
 
+        report["selected_model"] = selected_model
+
         # 2. Run Smoke Test with JSON Mode
         print(f"\n2. Testing Structured JSON Chat Completion with '{selected_model}'...")
         test_messages = [
@@ -93,26 +131,39 @@ def main() -> int:
 
         content = response.choices[0].message.content
         parsed = json.loads(content)
-        print(f"   -> [OK] Live completion succeeded!")
+        latency_ms = round((time.time() - start_time) * 1000, 1)
+
+        report["status"] = "CONNECTED"
+        report["json_mode_verified"] = True
+        report["latency_ms"] = latency_ms
+        report["message"] = f"Successfully verified Groq model '{selected_model}' with structured JSON support in {latency_ms}ms."
+
+        print(f"   -> [OK] Live completion succeeded! ({latency_ms}ms)")
         print(f"   -> Model used: {response.model}")
         print(f"   -> Structured JSON parsed: {parsed}")
         print("--------------------------------------------------------------------------------")
         print("[SUCCESS] Groq integration verified and ready for live investigations.")
         print("================================================================================")
+        finalize_groq_report(report)
         return 0
 
     except AuthenticationError as auth_err:
-        print(f"[FAIL] Groq Authentication Rejected (401 Unauthorized): {auth_err}")
-        print("       Please verify that your GROQ_API_KEY in .env is valid.")
-        print("================================================================================")
+        report["status"] = "AUTHENTICATION_FAILED"
+        report["message"] = f"Groq Authentication Rejected (401 Unauthorized): {auth_err}"
+        print(f"[FAIL] {report['message']}")
+        finalize_groq_report(report)
         return 1
     except APIError as api_err:
-        print(f"[FAIL] Groq API Error: {api_err}")
-        print("================================================================================")
+        report["status"] = "API_ERROR"
+        report["message"] = f"Groq API Error: {api_err}"
+        print(f"[FAIL] {report['message']}")
+        finalize_groq_report(report)
         return 1
     except Exception as ex:
-        print(f"[FAIL] Unexpected error during Groq verification: {ex}")
-        print("================================================================================")
+        report["status"] = "ERROR"
+        report["message"] = f"Unexpected error during Groq verification: {ex}"
+        print(f"[FAIL] {report['message']}")
+        finalize_groq_report(report)
         return 1
 
 

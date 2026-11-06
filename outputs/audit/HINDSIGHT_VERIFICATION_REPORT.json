@@ -1,0 +1,6 @@
+{
+  "timestamp": "2026-11-06T07:39:38.268342+00:00",
+  "status": "NOT_CONFIGURED",
+  "message": "HINDSIGHT_API_KEY is not configured. .env file detected at 'C:\\Users\\avira\\Desktop\\OPSRECALL\\.env', but HINDSIGHT_API_KEY is not set. OPSRECALL is operating in Offline Preview Mode with simulated operational memories.",
+  "overall_success": false
+}

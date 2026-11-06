@@ -20,7 +20,7 @@ This checklist provides a step-by-step sequence for judges and engineers to repe
   ```bash
   python -m pytest -q
   ```
-  *Expected Output: `32 passed, 3 skipped` with 0 failures.*
+  *Expected Output: `42 passed, 3 skipped` with 0 failures.*
 
 - [ ] **Verify Model and Memory Endpoints**:
   ```bash
@@ -117,5 +117,5 @@ streamlit run app.py
   - Select **`Evaluation Lab`**.
   - Click **`Run Benchmark Evaluation`**.
 - **What to highlight**:
-  - Evaluates 12 scenarios across 7 distinct dimensions with complete ground-truth anti-leakage isolation.
-  - Shows +16.7% Top-1 root cause accuracy gain, +41.7% relevance retrieval gain, and +25.0 points improvement on recurrent incident resolution.
+  - Evaluates 16 scenarios across 12 distinct dimensions with complete ground-truth anti-leakage isolation.
+  - Shows +25.0% Top-1 root cause accuracy gain, +100.0% relevance retrieval gain, and +40.5 points improvement on recurrent incident resolution.

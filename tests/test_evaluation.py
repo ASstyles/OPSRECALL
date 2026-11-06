@@ -1,5 +1,6 @@
 """
 Unit tests for OPSRECALL Evaluation Framework and Ground-Truth Isolation.
+Validates 16 benchmark cases, anti-leakage isolation, and 12-dimensional scoring.
 """
 
 from pathlib import Path
@@ -11,7 +12,7 @@ from core.validators import EvaluationCase, EvaluationGroundTruth
 def test_load_evaluation_cases_isolated():
     eval_fw = EvaluationFramework()
     cases = eval_fw.load_evaluation_cases()
-    assert len(cases) == 12, f"Expected 12 benchmark cases, found {len(cases)}"
+    assert len(cases) == 16, f"Expected 16 benchmark cases, found {len(cases)}"
 
     # Check that model-facing cases contain ZERO ground-truth answer keys
     for case in cases:
@@ -20,13 +21,14 @@ def test_load_evaluation_cases_isolated():
         assert "expected_historical_match" not in case_dict
         assert "unsuccessful_mitigations_to_avoid" not in case_dict
         assert "is_distractor" not in case_dict
+        assert "expected_optimal_first_action" not in case_dict
         assert len(case.symptoms) > 0
 
 
 def test_load_ground_truth_isolated():
     eval_fw = EvaluationFramework()
     gt_map = eval_fw.load_ground_truth()
-    assert len(gt_map) == 12
+    assert len(gt_map) == 16
 
     # Check recurrent case EVAL-001
     gt1 = gt_map.get("EVAL-001")
@@ -41,22 +43,33 @@ def test_load_ground_truth_isolated():
     assert gt6.is_distractor is True
     assert gt6.expected_historical_match is None
 
+    # Check novel distractor EVAL-012
+    gt12 = gt_map.get("EVAL-012")
+    assert gt12 is not None
+    assert gt12.requires_uncertainty is True
 
-def test_benchmark_run_and_7_metrics():
+
+def test_benchmark_run_and_12_metrics():
     eval_fw = EvaluationFramework()
     results = eval_fw.run_benchmark()
 
     assert "run_id" in results
-    assert results["cases_evaluated"] == 12
+    assert results["cases_evaluated"] == 16
     assert "metrics" in results
 
     metrics = results["metrics"]
+    assert "top_1_root_cause_accuracy" in metrics
     assert "top_3_root_cause_accuracy" in metrics
+    assert "retrieval_precision_pct" in metrics
+    assert "retrieval_recall_pct" in metrics
+    assert "mean_reciprocal_rank" in metrics
     assert "relevant_memory_retrieval_rate" in metrics
     assert "failed_mitigation_avoidance_rate" in metrics
+    assert "recommendation_safety_rate" in metrics
     assert "false_historical_recall_rate" in metrics
     assert "recommendation_grounding_rate" in metrics
     assert "appropriate_uncertainty_rate" in metrics
+    assert "expected_calibration_error" in metrics
     assert "composite_score" in metrics
 
     # Memory ON composite score should be >= Memory OFF

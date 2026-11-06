@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from config import settings
 from core.validators import Incident, InvestigationResult, ResolutionFeedback, CaseEvaluationScore
 
@@ -51,6 +51,9 @@ class DatabaseManager:
                     deployment_or_change TEXT,
                     suspected_cause TEXT,
                     actual_verified_root_cause TEXT,
+                    is_verified INTEGER DEFAULT 0,
+                    verified_by TEXT,
+                    verified_at TEXT,
                     diagnostic_actions_attempted TEXT,
                     failed_mitigation_attempts TEXT,
                     successful_mitigation TEXT,
@@ -58,6 +61,7 @@ class DatabaseManager:
                     resolution_outcome TEXT,
                     verification_evidence TEXT,
                     lessons_learned TEXT,
+                    content_hash TEXT,
                     data_type TEXT DEFAULT 'SIMULATED_INCIDENT',
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -71,10 +75,14 @@ class DatabaseManager:
                     investigation_id TEXT PRIMARY KEY,
                     incident_id TEXT NOT NULL,
                     mode TEXT NOT NULL,
+                    retrieval_mode_label TEXT DEFAULT 'DISABLED',
                     executive_summary TEXT,
                     hypotheses TEXT NOT NULL,
                     recalled_memories TEXT,
+                    structured_retrievals TEXT,
                     historical_incidents_referenced TEXT,
+                    previous_failed_approaches TEXT,
+                    memory_contradictions_detected TEXT,
                     recommended_remediation_steps TEXT,
                     confidence_level TEXT,
                     llm_model TEXT,
@@ -85,7 +93,7 @@ class DatabaseManager:
                 """
             )
 
-            # Human-verified resolutions table
+            # Human-verified resolutions table with multi-stage status & conflict tracking
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS resolutions (
@@ -97,8 +105,12 @@ class DatabaseManager:
                     verification_evidence TEXT,
                     lessons_learned TEXT,
                     verified_by TEXT,
+                    status TEXT DEFAULT 'FEEDBACK_RECEIVED',
                     retained_to_hindsight INTEGER DEFAULT 0,
                     hindsight_operation_id TEXT,
+                    error_message TEXT,
+                    conflict_detected INTEGER DEFAULT 0,
+                    conflict_details TEXT,
                     created_at TEXT NOT NULL
                 )
                 """
@@ -130,12 +142,14 @@ class DatabaseManager:
                     run_id TEXT NOT NULL,
                     case_id TEXT NOT NULL,
                     memory_mode TEXT NOT NULL,
+                    top_1_root_cause_hit INTEGER DEFAULT 0,
                     top_3_root_cause_hit INTEGER NOT NULL,
                     retrieved_expected_historical INTEGER NOT NULL,
                     recalled_failed_mitigations INTEGER NOT NULL,
                     avoided_unsuccessful_mitigations INTEGER NOT NULL,
                     false_recall_flagged INTEGER NOT NULL,
                     appropriate_uncertainty INTEGER NOT NULL,
+                    is_safe_recommendation INTEGER DEFAULT 1,
                     overall_score REAL NOT NULL,
                     explanation TEXT,
                     FOREIGN KEY (run_id) REFERENCES evaluation_runs (run_id)
@@ -144,6 +158,43 @@ class DatabaseManager:
             )
 
             conn.commit()
+
+            # Automatic column migrations for existing databases
+            self._migrate_table(conn, "incidents", [
+                ("is_verified", "INTEGER DEFAULT 0"),
+                ("verified_by", "TEXT"),
+                ("verified_at", "TEXT"),
+                ("content_hash", "TEXT"),
+            ])
+            self._migrate_table(conn, "investigations", [
+                ("retrieval_mode_label", "TEXT DEFAULT 'DISABLED'"),
+                ("structured_retrievals", "TEXT"),
+                ("previous_failed_approaches", "TEXT"),
+                ("memory_contradictions_detected", "TEXT"),
+            ])
+            self._migrate_table(conn, "resolutions", [
+                ("status", "TEXT DEFAULT 'FEEDBACK_RECEIVED'"),
+                ("error_message", "TEXT"),
+                ("conflict_detected", "INTEGER DEFAULT 0"),
+                ("conflict_details", "TEXT"),
+            ])
+            self._migrate_table(conn, "evaluation_details", [
+                ("top_1_root_cause_hit", "INTEGER DEFAULT 0"),
+                ("is_safe_recommendation", "INTEGER DEFAULT 1"),
+            ])
+
+    def _migrate_table(self, conn: sqlite3.Connection, table_name: str, columns: List[Tuple[str, str]]) -> None:
+        """Add missing columns to an existing SQLite table if not present."""
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        existing_cols = {row["name"] for row in cursor.fetchall()}
+        for col_name, col_type in columns:
+            if col_name not in existing_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+        conn.commit()
 
     def upsert_incident(self, incident: Incident) -> None:
         """Insert or replace an incident record in local database."""
@@ -154,10 +205,11 @@ class DatabaseManager:
                     incident_id, incident_title, affected_service, incident_timestamp,
                     severity, symptoms, error_logs, metrics, deployment_id,
                     deployment_or_change, suspected_cause, actual_verified_root_cause,
+                    is_verified, verified_by, verified_at,
                     diagnostic_actions_attempted, failed_mitigation_attempts,
                     successful_mitigation, resolution, resolution_outcome,
-                    verification_evidence, lessons_learned, data_type, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    verification_evidence, lessons_learned, content_hash, data_type, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     incident.incident_id,
@@ -172,6 +224,9 @@ class DatabaseManager:
                     incident.deployment_or_change,
                     incident.suspected_cause,
                     incident.actual_verified_root_cause,
+                    1 if incident.is_verified or incident.actual_verified_root_cause else 0,
+                    incident.verified_by,
+                    incident.verified_at,
                     json.dumps(incident.diagnostic_actions_attempted),
                     json.dumps(incident.failed_mitigation_attempts),
                     incident.successful_mitigation,
@@ -179,6 +234,7 @@ class DatabaseManager:
                     incident.resolution_outcome,
                     incident.verification_evidence,
                     incident.lessons_learned,
+                    incident.content_hash or incident.compute_content_hash(),
                     incident.data_type,
                 ),
             )
@@ -214,20 +270,24 @@ class DatabaseManager:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO investigations (
-                    investigation_id, incident_id, mode, executive_summary,
-                    hypotheses, recalled_memories, historical_incidents_referenced,
-                    recommended_remediation_steps, confidence_level, llm_model,
-                    execution_time_seconds, created_at, raw_result
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    investigation_id, incident_id, mode, retrieval_mode_label, executive_summary,
+                    hypotheses, recalled_memories, structured_retrievals, historical_incidents_referenced,
+                    previous_failed_approaches, memory_contradictions_detected, recommended_remediation_steps,
+                    confidence_level, llm_model, execution_time_seconds, created_at, raw_result
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.investigation_id,
                     result.incident_id,
                     result.mode,
+                    result.retrieval_mode_label,
                     result.executive_summary,
                     json.dumps([h.model_dump() for h in result.hypotheses]),
                     json.dumps([m.model_dump() for m in result.recalled_memories]),
+                    json.dumps([s.model_dump() for s in result.structured_retrievals]),
                     json.dumps(result.historical_incidents_referenced),
+                    json.dumps([f.model_dump() for f in result.previous_failed_approaches]),
+                    json.dumps(result.memory_contradictions_detected),
                     json.dumps([r.model_dump() for r in result.recommended_remediation_steps]),
                     result.confidence_level,
                     result.llm_model,
@@ -244,7 +304,7 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT investigation_id, incident_id, mode, executive_summary,
+                SELECT investigation_id, incident_id, mode, retrieval_mode_label, executive_summary,
                        confidence_level, llm_model, execution_time_seconds, created_at
                 FROM investigations
                 ORDER BY created_at DESC
@@ -255,7 +315,7 @@ class DatabaseManager:
             return [dict(row) for row in cursor.fetchall()]
 
     def save_resolution(self, feedback: ResolutionFeedback) -> int:
-        """Save a human-confirmed incident resolution."""
+        """Save a human-confirmed incident resolution with multi-stage status and conflict tracking."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -263,8 +323,9 @@ class DatabaseManager:
                 INSERT INTO resolutions (
                     incident_id, verified_root_cause, successful_resolution,
                     failed_approaches, verification_evidence, lessons_learned,
-                    verified_by, retained_to_hindsight, hindsight_operation_id, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    verified_by, status, retained_to_hindsight, hindsight_operation_id,
+                    error_message, conflict_detected, conflict_details, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     feedback.incident_id,
@@ -274,8 +335,12 @@ class DatabaseManager:
                     feedback.verification_evidence,
                     feedback.lessons_learned,
                     feedback.verified_by,
+                    feedback.status,
                     1 if feedback.retained_to_hindsight else 0,
                     feedback.hindsight_operation_id,
+                    feedback.error_message,
+                    1 if feedback.conflict_detected else 0,
+                    feedback.conflict_details,
                     feedback.created_at,
                 ),
             )
@@ -342,22 +407,24 @@ class DatabaseManager:
                 conn.execute(
                     """
                     INSERT INTO evaluation_details (
-                        run_id, case_id, memory_mode, top_3_root_cause_hit,
+                        run_id, case_id, memory_mode, top_1_root_cause_hit, top_3_root_cause_hit,
                         retrieved_expected_historical, recalled_failed_mitigations,
                         avoided_unsuccessful_mitigations, false_recall_flagged,
-                        appropriate_uncertainty, overall_score, explanation
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        appropriate_uncertainty, is_safe_recommendation, overall_score, explanation
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         run_id,
                         d.case_id,
                         d.memory_mode,
+                        1 if getattr(d, "top_1_root_cause_hit", False) else 0,
                         1 if d.top_3_root_cause_hit else 0,
                         1 if d.retrieved_expected_historical else 0,
                         1 if d.recalled_failed_mitigations else 0,
                         1 if d.avoided_unsuccessful_mitigations else 0,
                         1 if d.false_recall_flagged else 0,
                         1 if d.appropriate_uncertainty else 0,
+                        1 if getattr(d, "is_safe_recommendation", True) else 0,
                         d.overall_score,
                         d.explanation,
                     ),
@@ -395,6 +462,9 @@ class DatabaseManager:
             deployment_or_change=row["deployment_or_change"],
             suspected_cause=row["suspected_cause"],
             actual_verified_root_cause=row["actual_verified_root_cause"],
+            is_verified=bool(row["is_verified"]) if "is_verified" in row.keys() else bool(row["actual_verified_root_cause"]),
+            verified_by=row["verified_by"] if "verified_by" in row.keys() else None,
+            verified_at=row["verified_at"] if "verified_at" in row.keys() else None,
             diagnostic_actions_attempted=json.loads(row["diagnostic_actions_attempted"]),
             failed_mitigation_attempts=json.loads(row["failed_mitigation_attempts"]),
             successful_mitigation=row["successful_mitigation"],
@@ -402,6 +472,7 @@ class DatabaseManager:
             resolution_outcome=row["resolution_outcome"],
             verification_evidence=row["verification_evidence"],
             lessons_learned=row["lessons_learned"],
+            content_hash=row["content_hash"] if "content_hash" in row.keys() else None,
             data_type=row["data_type"],
         )
 
@@ -415,4 +486,3 @@ def get_db(db_path: Optional[str] = None) -> DatabaseManager:
     if _db_instance is None or db_path is not None:
         _db_instance = DatabaseManager(db_path)
     return _db_instance
-

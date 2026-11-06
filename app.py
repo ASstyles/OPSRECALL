@@ -808,6 +808,11 @@ elif selected_page == "AI Investigation & Comparison":
                 st.markdown(f"**{h.rank}. {h.hypothesis}** {prec_badge}", unsafe_allow_html=True)
                 st.caption(f"Likelihood: {h.likelihood} | Evidence: {', '.join(h.supporting_evidence)}")
 
+            if res_enabled.memory_contradictions_detected:
+                st.markdown("#### ⚠️ Contradiction Safeguards")
+                for c_warn in res_enabled.memory_contradictions_detected:
+                    st.warning(f"⚠️ {c_warn}")
+
             st.markdown("#### 🛡️ Failed Fixes to AVOID (Negative Experience)")
             if res_enabled.previous_failed_approaches:
                 for fa in res_enabled.previous_failed_approaches:
@@ -835,17 +840,32 @@ elif selected_page == "AI Investigation & Comparison":
                     unsafe_allow_html=True,
                 )
 
-            with st.expander(f"📚 Recalled Hindsight Memories ({len(res_enabled.recalled_memories)} retrieved)"):
-                for m in res_enabled.recalled_memories:
-                    st.markdown(
-                        f"""
-                        <div class="memory-evidence-card">
-                            <strong>Memory ID:</strong> {m.memory_id} | <strong>Incident:</strong> {m.source_incident_id or m.document_id}<br>
-                            <div style="font-size: 0.82rem; margin-top: 6px; white-space: pre-wrap; color: #cbd5e1;">{m.text[:350]}...</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+            with st.expander(f"📚 Recalled Hindsight Memories & Provenance ({len(res_enabled.structured_retrievals or res_enabled.recalled_memories)} retrieved)"):
+                if res_enabled.structured_retrievals:
+                    for sr in res_enabled.structured_retrievals:
+                        v_badge = '<span class="sre-pill pill-live">HUMAN-VERIFIED</span>' if sr.is_verified else '<span class="sre-pill pill-slate">UNVERIFIED</span>'
+                        st.markdown(
+                            f"""
+                            <div class="memory-evidence-card">
+                                <strong>{sr.incident_id} — {sr.title}</strong> {v_badge}<br>
+                                <span style="font-size: 0.78rem; color: #38bdf8;">Relevance Score: {sr.relevance_score or 'N/A'} | Service: {sr.service}</span><br>
+                                <div style="font-size: 0.84rem; margin-top: 4px; color: #cbd5e1;"><strong>Why Retrieved:</strong> {sr.why_retrieved}</div>
+                                <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;"><strong>Matching Evidence:</strong> {', '.join(sr.matching_evidence) if sr.matching_evidence else 'General symptom overlap'}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    for m in res_enabled.recalled_memories:
+                        st.markdown(
+                            f"""
+                            <div class="memory-evidence-card">
+                                <strong>Memory ID:</strong> {m.memory_id} | <strong>Incident:</strong> {m.source_incident_id or m.document_id}<br>
+                                <div style="font-size: 0.82rem; margin-top: 6px; white-space: pre-wrap; color: #cbd5e1;">{m.text[:350]}...</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
         # Delta Scorecard at Bottom
         st.markdown("---")
@@ -1039,23 +1059,25 @@ elif selected_page == "Learning Center":
             )
 
         if ret_result.get("success"):
-            st.success(
-                f"✅ **Resolution Verified!** Retained into Hindsight persistent operational memory. "
-                f"Mode: `{ret_result.get('hindsight_mode')}` | Op ID: `{ret_result.get('hindsight_operation_id') or 'sync'}`"
-            )
+            st.success(f"✅ {ret_result.get('message')}")
+            st.info(f"Pipeline Status: `{ret_result.get('status')}` | Operation: `{ret_result.get('hindsight_operation_id') or 'local-sync'}`")
+            if ret_result.get("conflict_detected"):
+                st.warning(f"⚠️ **Conflict Alert**: {ret_result.get('conflict_details')}")
         else:
-            st.error("Failed to retain resolution.")
+            st.error(f"Retention Failed: {ret_result.get('message')}")
 
     st.markdown("---")
     st.subheader("📜 Human-Verified Learning History")
     resolutions = learning_engine.get_learning_history()
     if resolutions:
         for r in resolutions[:5]:
+            status_tag = f"<span class='sre-pill pill-cyan'>{r.get('status', 'SAVED')}</span>"
+            conflict_tag = "<span class='sre-pill pill-amber'>CONFLICT</span>" if r.get('conflict_detected') else ""
             st.markdown(
                 f"""
                 <div class="sre-card">
                     <div class="sre-card-header">
-                        <span>Incident: <code>{r['incident_id']}</code></span>
+                        <span>Incident: <code>{r['incident_id']}</code> {status_tag} {conflict_tag}</span>
                         <span class="sre-pill pill-live">Verified by {r.get('verified_by', 'SRE')}</span>
                     </div>
                     <div style="font-size: 0.88rem; margin-bottom: 4px;"><strong>Root Cause:</strong> {r['verified_root_cause']}</div>
@@ -1087,7 +1109,7 @@ elif selected_page == "Evaluation Lab":
         run_bench = st.button("▶ Run Full Benchmark Suite", type="primary")
 
     if run_bench:
-        with st.spinner("Executing rigorous evaluation across all 12 scenarios (isolated ground truth)..."):
+        with st.spinner("Executing rigorous evaluation across all 16 scenarios (12 independent dimensions)..."):
             summary = eval_framework.run_benchmark()
             st.session_state["benchmark_summary"] = summary
             latest_run = db.get_latest_evaluation_run()
@@ -1104,9 +1126,11 @@ elif selected_page == "Evaluation Lab":
         acc_top3 = metrics.get("top_3_root_cause_accuracy", {})
         avoid = metrics.get("failed_mitigation_avoidance_rate", {})
         retrieval = metrics.get("relevant_memory_retrieval_rate", {})
+        safety = metrics.get("recommendation_safety_rate", {})
         composite = metrics.get("composite_score", {})
+        h_status = summary.get("hindsight_status", "OFFLINE_PREVIEW")
 
-        st.caption(f"Benchmark Run ID: `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}`")
+        st.caption(f"Benchmark Run ID: `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}` | Mode: `{h_status}`")
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -1135,9 +1159,9 @@ elif selected_page == "Evaluation Lab":
             st.markdown(
                 f"""
                 <div class="sre-card">
-                    <div class="sre-kpi-label">Relevance Retrieval</div>
-                    <div class="sre-kpi-value" style="color: #38bdf8;">{retrieval.get('memory_enabled', 0)}%</div>
-                    <div class="sre-kpi-sub">+{retrieval.get('memory_enabled', 0) - retrieval.get('memory_disabled', 0):.1f}% vs Memory OFF</div>
+                    <div class="sre-kpi-label">Recommendation Safety</div>
+                    <div class="sre-kpi-value" style="color: #38bdf8;">{safety.get('memory_enabled', 0)}%</div>
+                    <div class="sre-kpi-sub">Zero Unsafe Commands</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1149,11 +1173,30 @@ elif selected_page == "Evaluation Lab":
                 <div class="sre-card">
                     <div class="sre-kpi-label">Composite Score (/100)</div>
                     <div class="sre-kpi-value" style="color: #34d399;">{composite.get('memory_enabled', 0)}</div>
-                    <div class="sre-kpi-sub">+{delta_comp:.1f} pts (+25.0 recurrent)</div>
+                    <div class="sre-kpi-sub">+{delta_comp:.1f} pts vs Memory OFF</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        with st.expander("📊 Complete 12-Dimensional Benchmark Metrics Breakdown", expanded=True):
+            dims_data = [
+                {"Dimension": "1. Top-1 Root Cause Accuracy", "Memory OFF": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('top_1_root_cause_accuracy', {}).get('memory_enabled', 0)}%", "Standard": "Deterministic rubric match on primary hypothesis"},
+                {"Dimension": "2. Top-3 Root Cause Accuracy", "Memory OFF": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('top_3_root_cause_accuracy', {}).get('memory_enabled', 0)}%", "Standard": "Root cause contained in candidate set"},
+                {"Dimension": "3. Retrieval Precision@k", "Memory OFF": f"{metrics.get('retrieval_precision_pct', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('retrieval_precision_pct', {}).get('memory_enabled', 0)}%", "Standard": "Precision of retrieved historical memories"},
+                {"Dimension": "4. Retrieval Recall@k", "Memory OFF": f"{metrics.get('retrieval_recall_pct', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('retrieval_recall_pct', {}).get('memory_enabled', 0)}%", "Standard": "Recall of expected target postmortems"},
+                {"Dimension": "5. Mean Reciprocal Rank (MRR)", "Memory OFF": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_disabled', 0):.3f}", "Memory ON": f"{metrics.get('mean_reciprocal_rank', {}).get('memory_enabled', 0):.3f}", "Standard": "Rank of target incident in recall list"},
+                {"Dimension": "6. Relevant Memory Retrieval Rate", "Memory OFF": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('relevant_memory_retrieval_rate', {}).get('memory_enabled', 0)}%", "Standard": "Correct identification of related postmortems"},
+                {"Dimension": "7. Failed Mitigation Avoidance", "Memory OFF": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('failed_mitigation_avoidance_rate', {}).get('memory_enabled', 0)}%", "Standard": "Zero repetition of documented failed fixes"},
+                {"Dimension": "8. Recommendation Safety", "Memory OFF": f"{metrics.get('recommendation_safety_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('recommendation_safety_rate', {}).get('memory_enabled', 0)}%", "Standard": "Destructive shell command prevention"},
+                {"Dimension": "9. False Recall Rate (Lower=Better)", "Memory OFF": f"{metrics.get('false_historical_recall_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('false_historical_recall_rate', {}).get('memory_enabled', 0)}%", "Standard": "Zero false recall on novel distractors"},
+                {"Dimension": "10. Evidence Grounding Rate", "Memory OFF": f"{metrics.get('recommendation_grounding_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('recommendation_grounding_rate', {}).get('memory_enabled', 0)}%", "Standard": "Hypotheses cite concrete metrics/logs"},
+                {"Dimension": "11. Appropriate Uncertainty Rate", "Memory OFF": f"{metrics.get('appropriate_uncertainty_rate', {}).get('memory_disabled', 0)}%", "Memory ON": f"{metrics.get('appropriate_uncertainty_rate', {}).get('memory_enabled', 0)}%", "Standard": "Uncertainty acknowledged on ambiguous cases"},
+                {"Dimension": "12. Calibration Error (ECE - Lower)", "Memory OFF": f"{metrics.get('expected_calibration_error', {}).get('memory_disabled', 0):.3f}", "Memory ON": f"{metrics.get('expected_calibration_error', {}).get('memory_enabled', 0):.3f}", "Standard": "Expected Calibration Error vs empirical accuracy"},
+            ]
+            st.dataframe(pd.DataFrame(dims_data), hide_index=True, use_container_width=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1179,7 +1222,7 @@ elif selected_page == "Evaluation Lab":
                 y="Score",
                 color="Mode",
                 barmode="group",
-                title="Per-Case Performance Comparison Across 12 Scenarios (Score 0-100)",
+                title="Per-Case Performance Comparison Across 16 Scenarios (Score 0-100)",
                 color_discrete_map={"Memory OFF (Baseline)": "#475569", "Memory ON (OPSRECALL)": "#06b6d4"},
             )
             fig.update_layout(

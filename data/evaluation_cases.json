@@ -268,5 +268,93 @@
     },
     "recent_deployment": "DEP-9450 increased consumer batch size from 500 to 10,000 without adjusting max.poll.interval.ms.",
     "configuration_changes": "max.poll.records increased to 10000"
+  },
+  {
+    "case_id": "EVAL-013",
+    "case_title": "Payment Pod Container Memory Leak Leading to Rolling OOMKills",
+    "affected_service": "payment-gateway",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Payment pods crash and restart every 25 minutes in a staggered wave",
+      "Memory usage grows linearly at 80MB/min under constant transaction rate",
+      "Downstream database and Redis connections remain completely healthy"
+    ],
+    "error_logs": [
+      "CRIT  [kubelet] Container payment-gateway exceeded memory limit (4096Mi) - OOMKilled",
+      "WARN  [payment-service] Heap dump shows 1.2M uncollected Jackson JSON parser buffers"
+    ],
+    "metrics": {
+      "pod_oom_restarts_1h": 8,
+      "heap_growth_rate_mb_min": 82.5,
+      "p99_latency_ms": 120
+    },
+    "recent_deployment": "DEP-9490 bumped Jackson databind library to version 2.17.0 with caching regression.",
+    "configuration_changes": "JSON serializer library upgraded"
+  },
+  {
+    "case_id": "EVAL-014",
+    "case_title": "Cascading Service Failure from Unbounded Retry Storm on Degraded User Profile API",
+    "affected_service": "checkout-orchestrator",
+    "severity": "SEV-1",
+    "symptoms": [
+      "Total checkout failure across all regions",
+      "Incoming request volume surged 12x despite constant active user counts",
+      "Downstream user-profile-service saturated with 45,000 req/sec"
+    ],
+    "error_logs": [
+      "ERROR [user-profile] Rate limit exceeded: 429 Too Many Requests to /api/v1/profile",
+      "WARN  [checkout-client] Immediate retry attempt 5 of 5 without exponential backoff or jitter"
+    ],
+    "metrics": {
+      "amplification_factor": 12.4,
+      "profile_429_rate_pct": 94.2,
+      "p99_latency_ms": 15000
+    },
+    "recent_deployment": "DEP-9520 removed exponential backoff delay and set immediate retry count to 5.",
+    "configuration_changes": "Retry policy configuration modified"
+  },
+  {
+    "case_id": "EVAL-015",
+    "case_title": "Contradictory Historical Guidance on Redis Cache Eviction vs Failover",
+    "affected_service": "catalog-service",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Redis memory usage at 95% maxmemory with volatile-lru eviction active",
+      "Read latency to catalog cache degraded to 850ms",
+      "Database read replica CPU elevated at 65%"
+    ],
+    "error_logs": [
+      "WARN  [redis-server] Eviction cycle taking >150ms per batch; keyspace memory near limit",
+      "INFO  [catalog-repo] Cache hit ratio 72% under memory eviction thrashing"
+    ],
+    "metrics": {
+      "redis_memory_pct": 95.2,
+      "eviction_rate_keys_sec": 4200,
+      "p99_latency_ms": 850
+    },
+    "recent_deployment": "None in last 3 days.",
+    "configuration_changes": "None"
+  },
+  {
+    "case_id": "EVAL-016",
+    "case_title": "Ambiguous Partial Outage with Conflicting Network vs Database Metrics",
+    "affected_service": "checkout-api",
+    "severity": "SEV-2",
+    "symptoms": [
+      "Sporadic 5-10% of checkout payments timeout after exactly 10s",
+      "Database CPU is normal (35%), pool connections available (80/150)",
+      "Intermittent TCP reset packets observed on some availability zone routes"
+    ],
+    "error_logs": [
+      "WARN  [checkout-db] Connection reset by peer after 10000ms idle",
+      "INFO  [network-probe] AZ-east-1b cross-rack packet loss fluctuating between 0% and 4%"
+    ],
+    "metrics": {
+      "sporadic_error_pct": 7.5,
+      "db_cpu_pct": 35.0,
+      "az_cross_rack_loss_pct": 3.8
+    },
+    "recent_deployment": "Unknown: infrastructure maintenance reported in AWS Status dashboard.",
+    "configuration_changes": "None"
   }
 ]

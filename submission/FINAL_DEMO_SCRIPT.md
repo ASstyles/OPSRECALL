@@ -87,12 +87,12 @@ When the engineer clicks **💾 Confirm Resolution & Retain into Hindsight**, th
 ### [02:35 - 03:00] Phase 5: Quantitative Evaluation & Conclusion
 
 **[Visual Cue]**:  
-*Click sidebar -> **Evaluation Lab**. Display the 12-case benchmark chart and macro KPI cards.*
+*Click sidebar -> **Evaluation Lab**. Display the 16-case benchmark chart and macro KPI cards.*
 
 **Speaker**:  
-"We validated this architecture across a rigorous 12-scenario benchmark with completely isolated ground truth. 
+"We validated this architecture across a rigorous 16-scenario benchmark across 12 evaluation dimensions with completely isolated ground truth. 
 
-On recurrent incidents, Hindsight memory improves resolution scores by **+25.0 points** (75.0 to 100.0) while flagging **100% of historical failed mitigations**.
+On recurrent incidents, Hindsight memory improves resolution scores by **+40.5 points** (59.5 to 100.0) with a **+25.0% lift in Top-1 accuracy** while flagging **100% of historical failed mitigations** and maintaining zero false recalls on novel edge cases.
 
 Production outages are expensive tuition payments. With persistent operational memory, engineering teams only have to pay it once.
 

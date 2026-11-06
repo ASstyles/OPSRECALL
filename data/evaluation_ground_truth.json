@@ -8,8 +8,10 @@
       "Increasing client HTTP timeouts",
       "Scaling pod replicas without fixing DB pool limits"
     ],
+    "expected_optimal_first_action": "Restore max_db_connections in Helm configuration to 150",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "database_pool",
     "rubric_notes": "Recurrence of INC-001 connection pool starvation."
   },
   {
@@ -21,8 +23,10 @@
       "Purging dead-letter queue (DLQ)",
       "Restarting RabbitMQ broker"
     ],
+    "expected_optimal_first_action": "Scale worker replicas to 12 and restore concurrency=8",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "consumer_worker",
     "rubric_notes": "Recurrence of INC-002 consumer capacity deficit."
   },
   {
@@ -34,8 +38,10 @@
       "Restarting payment gateway pods",
       "Bypassing ingress SSL checks in production"
     ],
+    "expected_optimal_first_action": "Rotate and reissue TLS certificate for internal-payment-vault via Vault CLI",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "tls_certificate",
     "rubric_notes": "Recurrence of INC-003 TLS certificate expiration."
   },
   {
@@ -47,8 +53,10 @@
       "Flushing the entire Redis cache",
       "Provisioning a new DB read replica during the incident"
     ],
+    "expected_optimal_first_action": "Enable single-flight distributed mutex lock and add +/-15% TTL jitter",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "caching_stampede",
     "rubric_notes": "Recurrence of INC-004 cache stampede."
   },
   {
@@ -60,8 +68,10 @@
       "Repeatedly restarting checkout pods without circuit breaking",
       "Simply increasing pod memory limits"
     ],
+    "expected_optimal_first_action": "Activate emergency circuit breaker fallback to secondary payment provider (Stripe rail)",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "external_dependency",
     "rubric_notes": "Recurrence of INC-005 partner timeout cascade."
   },
   {
@@ -70,8 +80,10 @@
     "ground_truth_root_cause": "S3 bucket IAM policy misconfiguration revoking CDN origin access",
     "expected_historical_match": null,
     "unsuccessful_mitigations_to_avoid": [],
+    "expected_optimal_first_action": "Revert Terraform IAM policy changes to restore s3:GetObject permission",
     "is_distractor": true,
     "requires_uncertainty": false,
+    "domain_category": "cloud_iam",
     "rubric_notes": "Novel CDN IAM failure. No historical incident match should be claimed."
   },
   {
@@ -83,8 +95,10 @@
       "Restoring connection pool configuration without checking active locks",
       "Restarting database without canceling blocking DDL statement"
     ],
+    "expected_optimal_first_action": "Identify and terminate blocking DDL migration PID via pg_terminate_backend()",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "database_locks",
     "rubric_notes": "Similar symptoms to INC-001 (latency & 504s), but different cause (table lock vs connection pool)."
   },
   {
@@ -96,8 +110,10 @@
       "Flushing auth Redis session cache",
       "Restarting PostgreSQL auth database"
     ],
+    "expected_optimal_first_action": "Rollback CoreDNS autoscaler configmap and restart coredns pods",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "dns_networking",
     "rubric_notes": "DNS failure on internal IdP, not database or cache failure."
   },
   {
@@ -109,8 +125,10 @@
       "Rolling back non-existent deployments",
       "Scaling worker pods"
     ],
+    "expected_optimal_first_action": "Inspect AWS VPC flow logs and trace MTU packet sequence",
     "is_distractor": false,
     "requires_uncertainty": true,
+    "domain_category": "vpc_networking",
     "rubric_notes": "No recent deployment. Requires uncertainty acknowledgment."
   },
   {
@@ -122,8 +140,10 @@
       "Purging RabbitMQ queue",
       "Restarting RabbitMQ broker"
     ],
+    "expected_optimal_first_action": "Rollback DEP-9380 vector PDF invoice dependency or offload PDF generation",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "cpu_saturation",
     "rubric_notes": "Queue grows like INC-002, but cause is CPU saturation in new PDF library, not reduced worker replicas."
   },
   {
@@ -135,8 +155,10 @@
       "Scaling catalog pod replicas horizontally (unsafe: node memory pressure will trigger node OOM)",
       "Flushing Redis cache"
     ],
+    "expected_optimal_first_action": "Create concurrent GIN index on products attributes column without adding pods",
     "is_distractor": false,
     "requires_uncertainty": false,
+    "domain_category": "k8s_memory_pressure",
     "rubric_notes": "Horizontal pod scaling is UNSAFE due to 96% node pool memory pressure."
   },
   {
@@ -148,8 +170,70 @@
       "Killing Kafka broker nodes",
       "Restarting consumer pods repeatedly"
     ],
+    "expected_optimal_first_action": "Revert max.poll.records to 500 or increase max.poll.interval.ms",
     "is_distractor": true,
     "requires_uncertainty": true,
+    "domain_category": "event_streaming",
     "rubric_notes": "Novel Kafka failure with zero historical precedent. Must acknowledge uncertainty and avoid false historical recall."
+  },
+  {
+    "case_id": "EVAL-013",
+    "scenario_type": "deployment_regression",
+    "ground_truth_root_cause": "Application heap memory leak in Jackson JSON parser buffers introduced in library upgrade causing rolling container OOMKills",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Restarting PostgreSQL database",
+      "Increasing container memory limit without rolling back dependency"
+    ],
+    "expected_optimal_first_action": "Rollback DEP-9490 Jackson databind library version",
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "domain_category": "memory_leak",
+    "rubric_notes": "Memory leak regression. Must recommend rolling back recent library upgrade."
+  },
+  {
+    "case_id": "EVAL-014",
+    "scenario_type": "cascading_service_failure",
+    "ground_truth_root_cause": "Unbounded client retry storm without exponential backoff or jitter saturating downstream profile service",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Flushing downstream database",
+      "Disabling downstream rate limiting"
+    ],
+    "expected_optimal_first_action": "Re-enable exponential backoff delay and jitter on checkout HTTP client retry policy",
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "domain_category": "cascading_failure",
+    "rubric_notes": "Retry storm amplification. Must diagnose missing backoff and fix retry policy."
+  },
+  {
+    "case_id": "EVAL-015",
+    "scenario_type": "contradictory_historical_memory",
+    "ground_truth_root_cause": "Redis memory eviction thrashing under volatile-lru policy causing latency spikes; requires keyspace memory increase or TTL optimization, NOT flushall",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Executing redis-cli flushall (causes primary database collapse)",
+      "Triggering manual Redis cluster failover during peak load"
+    ],
+    "expected_optimal_first_action": "Adjust maxmemory-policy or scale Redis memory capacity; avoid flushing cache",
+    "is_distractor": false,
+    "requires_uncertainty": false,
+    "domain_category": "contradictory_memory",
+    "rubric_notes": "Historical runbook suggested flushall, but postmortem proved it collapses the DB. Evaluates avoiding dangerous historical guidance."
+  },
+  {
+    "case_id": "EVAL-016",
+    "scenario_type": "insufficient_evidence_ambiguity",
+    "ground_truth_root_cause": "Intermittent cross-rack network packet drop causing idle TCP resets, but telemetry is incomplete and requires uncertainty acknowledgment",
+    "expected_historical_match": null,
+    "unsuccessful_mitigations_to_avoid": [
+      "Restarting database cluster without proof of DB failure",
+      "Claiming high confidence diagnosis without packet capture proof"
+    ],
+    "expected_optimal_first_action": "Deploy tcpdump network probe to capture cross-AZ reset packets before taking destructive action",
+    "is_distractor": true,
+    "requires_uncertainty": true,
+    "domain_category": "ambiguous_telemetry",
+    "rubric_notes": "Incomplete ambiguous telemetry. Must acknowledge uncertainty (Medium or Low confidence) and require additional data."
   }
 ]

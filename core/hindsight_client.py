@@ -2,12 +2,13 @@
 Hindsight Client wrapper for OPSRECALL.
 Integrates with the official `hindsight-client` Python SDK.
 Provides robust connection health checks, memory bank creation/verification,
-and typed interfaces for RETAIN, RECALL, and REFLECT operations.
+bounded asynchronous indexing waits, and typed interfaces for RETAIN, RECALL, and REFLECT operations.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 from config import settings
 
@@ -29,7 +30,7 @@ logger = logging.getLogger("opsrecall.hindsight")
 
 
 class HindsightClientWrapper:
-    """Wrapper around the official Hindsight SDK with error handling and health checks."""
+    """Wrapper around the official Hindsight SDK with error handling, latency metrics, and health checks."""
 
     def __init__(
         self,
@@ -65,7 +66,7 @@ class HindsightClientWrapper:
     def is_configured(self) -> bool:
         """Check whether genuine Hindsight API credentials are provided."""
         if self._explicit_api_key is not None:
-            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5)
+            return bool(self._explicit_api_key and len(self._explicit_api_key) > 5 and not self._explicit_api_key.lower().startswith("your_"))
         return settings.is_hindsight_configured()
 
     def reset(self) -> None:
@@ -84,7 +85,7 @@ class HindsightClientWrapper:
                     base_url=self.base_url,
                     api_key=self.api_key,
                     timeout=30.0,
-                    user_agent="OPSRECALL-Incident-Agent/1.0",
+                    user_agent="OPSRECALL-Incident-Agent/2.0",
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Hindsight SDK client: {e}")
@@ -93,7 +94,7 @@ class HindsightClientWrapper:
         return self._client
 
     def check_health(self) -> Dict[str, Any]:
-        """Perform a genuine health check against Hindsight Cloud."""
+        """Perform a genuine health check with roundtrip latency against Hindsight Cloud."""
         if not self.is_configured:
             env_file = settings.get_env_file_path()
             env_msg = (
@@ -108,12 +109,14 @@ class HindsightClientWrapper:
                 "base_url": self.base_url,
                 "version": None,
                 "bank_exists": False,
+                "latency_ms": None,
                 "message": (
                     f"HINDSIGHT_API_KEY is not configured. {env_msg} "
                     "OPSRECALL is operating in Offline Preview Mode with simulated operational memories."
                 ),
             }
 
+        start_time = time.time()
         try:
             client = self.get_client()
 
@@ -142,6 +145,8 @@ class HindsightClientWrapper:
                 )
                 bank_exists = True
 
+            latency_ms = round((time.time() - start_time) * 1000, 1)
+
             return {
                 "status": "CONNECTED",
                 "mode": "LIVE",
@@ -149,7 +154,8 @@ class HindsightClientWrapper:
                 "base_url": self.base_url,
                 "version": version_str,
                 "bank_exists": bank_exists,
-                "message": f"Successfully connected to Hindsight Cloud. Memory bank '{self.bank_id}' is active.",
+                "latency_ms": latency_ms,
+                "message": f"Successfully connected to Hindsight Cloud ({latency_ms}ms). Memory bank '{self.bank_id}' is active.",
             }
 
         except UnauthorizedException as auth_err:
@@ -160,6 +166,7 @@ class HindsightClientWrapper:
                 "base_url": self.base_url,
                 "version": None,
                 "bank_exists": False,
+                "latency_ms": None,
                 "message": f"Hindsight authentication rejected (401 Unauthorized): {auth_err}",
             }
         except ApiException as api_err:
@@ -170,6 +177,7 @@ class HindsightClientWrapper:
                 "base_url": self.base_url,
                 "version": None,
                 "bank_exists": False,
+                "latency_ms": None,
                 "message": f"Hindsight API returned an error: {api_err}",
             }
         except Exception as ex:
@@ -180,6 +188,7 @@ class HindsightClientWrapper:
                 "base_url": self.base_url,
                 "version": None,
                 "bank_exists": False,
+                "latency_ms": None,
                 "message": f"Could not reach Hindsight server at {self.base_url}: {ex}",
             }
 
@@ -210,10 +219,9 @@ class HindsightClientWrapper:
     ) -> bool:
         """
         Bounded polling for Hindsight asynchronous indexing.
-        Polls client.list_memories until memory units for the document appear or timeout.
+        Polls client.list_memories until memory units for document appear or timeout.
+        Returns True if indexed, False if timeout.
         """
-        import time
-
         if not self.is_configured:
             return False
 
@@ -230,7 +238,7 @@ class HindsightClientWrapper:
                 )
                 total = getattr(res, "total", 0)
                 items = getattr(res, "items", [])
-                if total > 0 or len(items) > 0:
+                if (total is not None and total > 0) or (items is not None and len(items) > 0):
                     return True
             except Exception as e:
                 logger.debug(f"Polling list_memories error for {document_id}: {e}")
@@ -272,19 +280,25 @@ class HindsightClientWrapper:
         max_tokens: int = 4096,
         budget: str = "mid",
         tags: Optional[List[str]] = None,
+        tags_match: str = "any",
         bank_id: Optional[str] = None,
     ) -> RecallResponse:
         """Recall relevant historical operational memories via semantic & TEMPR search."""
         client = self.get_client()
         target_bank = bank_id or self.bank_id
 
-        response = client.recall(
-            bank_id=target_bank,
-            query=query,
-            max_tokens=max_tokens,
-            budget=budget,
-            tags=tags,
-        )
+        # Pass supported arguments to official SDK recall
+        kwargs: Dict[str, Any] = {
+            "bank_id": target_bank,
+            "query": query,
+            "max_tokens": max_tokens,
+            "budget": budget,
+        }
+        if tags:
+            kwargs["tags"] = tags
+            kwargs["tags_match"] = tags_match
+
+        response = client.recall(**kwargs)
         return response
 
     def reflect(
@@ -318,4 +332,3 @@ def get_hindsight_client(force_reload: bool = False) -> HindsightClientWrapper:
             _hindsight_wrapper_instance.reset()
         _hindsight_wrapper_instance = HindsightClientWrapper()
     return _hindsight_wrapper_instance
-
