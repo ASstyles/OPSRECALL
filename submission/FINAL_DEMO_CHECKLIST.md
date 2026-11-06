@@ -88,7 +88,7 @@ Use this repeatable checklist to verify, demonstrate, and judge OPSRECALL from t
 - [ ] Navigate to **Evaluation Lab**.
 - [ ] Click **▶ Run Full Benchmark Suite**.
 - [ ] Verify:
-  - Evaluates 16 cases across 12 dimensions with isolated ground truth.
+  - Evaluates 16 cases across 16 dimensions with isolated ground truth.
   - Plotly dark bar chart renders comparisons across all 16 cases.
   - Shows +25.0% Top-1 root cause gain (+40.5 points on recurrent incidents) and 100% failed fix avoidance.
 

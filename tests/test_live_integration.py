@@ -67,11 +67,36 @@ def test_live_hindsight_retain_recall_and_persistence():
         bank_id=test_bank,
     )
     recall_resp = fresh_client.recall(
-        query=f"live-test-svc token {run_token}",
+        query=f"verification incident {doc_id} with token {run_token}",
         bank_id=test_bank,
     )
     results = getattr(recall_resp, "results", [])
-    assert isinstance(results, list)
+    assert isinstance(results, list) and len(results) > 0, (
+        f"Live Hindsight recall must return non-empty results for retained probe incident {doc_id}."
+    )
+
+    # Assert exact probe document ID or unique token is recovered
+    found = any(
+        doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "")
+        for r in results
+    )
+    assert found, (
+        f"Retained probe document {doc_id} or unique token {run_token} was not found in recall results: {results}"
+    )
+
+    # 4. Negative Control Query (Rejection of Unrelated Incidents)
+    negative_resp = fresh_client.recall(
+        query="unrelated astrophysical supernova cosmic background radiation query",
+        bank_id=test_bank,
+    )
+    neg_results = getattr(negative_resp, "results", [])
+    neg_found = any(
+        doc_id in getattr(r, "document_id", "") or run_token in getattr(r, "text", "")
+        for r in neg_results
+    )
+    assert not neg_found, (
+        f"Probe document {doc_id} leaked into unrelated negative control query results!"
+    )
 
 
 @pytest.mark.skipif(

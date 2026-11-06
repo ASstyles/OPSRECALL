@@ -49,7 +49,7 @@ def test_load_ground_truth_isolated():
     assert gt12.requires_uncertainty is True
 
 
-def test_benchmark_run_and_12_metrics():
+def test_benchmark_run_and_16_metrics():
     eval_fw = EvaluationFramework()
     results = eval_fw.run_benchmark()
 
@@ -60,17 +60,27 @@ def test_benchmark_run_and_12_metrics():
     metrics = results["metrics"]
     assert "top_1_root_cause_accuracy" in metrics
     assert "top_3_root_cause_accuracy" in metrics
+    assert "causal_reasoning_quality" in metrics
+    assert "evidence_grounding_rate" in metrics
     assert "retrieval_precision_pct" in metrics
     assert "retrieval_recall_pct" in metrics
     assert "mean_reciprocal_rank" in metrics
     assert "relevant_memory_retrieval_rate" in metrics
     assert "failed_mitigation_avoidance_rate" in metrics
+    assert "recommendation_action_quality" in metrics
     assert "recommendation_safety_rate" in metrics
     assert "false_historical_recall_rate" in metrics
-    assert "recommendation_grounding_rate" in metrics
-    assert "appropriate_uncertainty_rate" in metrics
+    assert "novel_incident_handling_rate" in metrics
+    assert "brier_score" in metrics
     assert "expected_calibration_error" in metrics
+    assert "investigation_consistency_rate" in metrics
+    assert "human_verification_compliance_rate" in metrics
     assert "composite_score" in metrics
+
+    # Verify calibration details
+    assert "calibration_details" in results
+    assert "bins_memory_enabled" in results["calibration_details"]
+    assert len(results["calibration_details"]["bins_memory_enabled"]) == 3
 
     # Memory ON composite score should be >= Memory OFF
     avg_on = metrics["composite_score"]["memory_enabled"]

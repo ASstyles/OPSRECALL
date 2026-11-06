@@ -31,157 +31,208 @@ class DatabaseManager:
         return conn
 
     def init_schema(self) -> None:
-        """Initialize required database tables if they do not exist."""
+        """Initialize database schema via versioned transactional migrations."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-
-            # Incidents table
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS incidents (
-                    incident_id TEXT PRIMARY KEY,
-                    incident_title TEXT NOT NULL,
-                    affected_service TEXT NOT NULL,
-                    incident_timestamp TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    symptoms TEXT NOT NULL,
-                    error_logs TEXT NOT NULL,
-                    metrics TEXT NOT NULL,
-                    deployment_id TEXT,
-                    deployment_or_change TEXT,
-                    suspected_cause TEXT,
-                    actual_verified_root_cause TEXT,
-                    is_verified INTEGER DEFAULT 0,
-                    verified_by TEXT,
-                    verified_at TEXT,
-                    diagnostic_actions_attempted TEXT,
-                    failed_mitigation_attempts TEXT,
-                    successful_mitigation TEXT,
-                    resolution TEXT,
-                    resolution_outcome TEXT,
-                    verification_evidence TEXT,
-                    lessons_learned TEXT,
-                    content_hash TEXT,
-                    data_type TEXT DEFAULT 'SIMULATED_INCIDENT',
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    applied_at TEXT NOT NULL
                 )
                 """
             )
-
-            # Investigations table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS investigations (
-                    investigation_id TEXT PRIMARY KEY,
-                    incident_id TEXT NOT NULL,
-                    mode TEXT NOT NULL,
-                    retrieval_mode_label TEXT DEFAULT 'DISABLED',
-                    executive_summary TEXT,
-                    hypotheses TEXT NOT NULL,
-                    recalled_memories TEXT,
-                    structured_retrievals TEXT,
-                    historical_incidents_referenced TEXT,
-                    previous_failed_approaches TEXT,
-                    memory_contradictions_detected TEXT,
-                    recommended_remediation_steps TEXT,
-                    confidence_level TEXT,
-                    llm_model TEXT,
-                    execution_time_seconds REAL,
-                    created_at TEXT NOT NULL,
-                    raw_result TEXT NOT NULL
-                )
-                """
-            )
-
-            # Human-verified resolutions table with multi-stage status & conflict tracking
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS resolutions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    incident_id TEXT NOT NULL,
-                    verified_root_cause TEXT NOT NULL,
-                    successful_resolution TEXT NOT NULL,
-                    failed_approaches TEXT NOT NULL,
-                    verification_evidence TEXT,
-                    lessons_learned TEXT,
-                    verified_by TEXT,
-                    status TEXT DEFAULT 'FEEDBACK_RECEIVED',
-                    retained_to_hindsight INTEGER DEFAULT 0,
-                    hindsight_operation_id TEXT,
-                    error_message TEXT,
-                    conflict_detected INTEGER DEFAULT 0,
-                    conflict_details TEXT,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-
-            # Evaluation runs table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS evaluation_runs (
-                    run_id TEXT PRIMARY KEY,
-                    run_timestamp TEXT NOT NULL,
-                    cases_evaluated INTEGER NOT NULL,
-                    accuracy_enabled REAL NOT NULL,
-                    accuracy_disabled REAL NOT NULL,
-                    avoidance_enabled REAL NOT NULL,
-                    avoidance_disabled REAL NOT NULL,
-                    avg_score_enabled REAL NOT NULL,
-                    avg_score_disabled REAL NOT NULL,
-                    summary_json TEXT NOT NULL
-                )
-                """
-            )
-
-            # Evaluation case details
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS evaluation_details (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL,
-                    case_id TEXT NOT NULL,
-                    memory_mode TEXT NOT NULL,
-                    top_1_root_cause_hit INTEGER DEFAULT 0,
-                    top_3_root_cause_hit INTEGER NOT NULL,
-                    retrieved_expected_historical INTEGER NOT NULL,
-                    recalled_failed_mitigations INTEGER NOT NULL,
-                    avoided_unsuccessful_mitigations INTEGER NOT NULL,
-                    false_recall_flagged INTEGER NOT NULL,
-                    appropriate_uncertainty INTEGER NOT NULL,
-                    is_safe_recommendation INTEGER DEFAULT 1,
-                    overall_score REAL NOT NULL,
-                    explanation TEXT,
-                    FOREIGN KEY (run_id) REFERENCES evaluation_runs (run_id)
-                )
-                """
-            )
-
             conn.commit()
+            self._run_versioned_migrations(conn)
 
-            # Automatic column migrations for existing databases
-            self._migrate_table(conn, "incidents", [
-                ("is_verified", "INTEGER DEFAULT 0"),
-                ("verified_by", "TEXT"),
-                ("verified_at", "TEXT"),
-                ("content_hash", "TEXT"),
-            ])
-            self._migrate_table(conn, "investigations", [
-                ("retrieval_mode_label", "TEXT DEFAULT 'DISABLED'"),
-                ("structured_retrievals", "TEXT"),
-                ("previous_failed_approaches", "TEXT"),
-                ("memory_contradictions_detected", "TEXT"),
-            ])
-            self._migrate_table(conn, "resolutions", [
-                ("status", "TEXT DEFAULT 'FEEDBACK_RECEIVED'"),
-                ("error_message", "TEXT"),
-                ("conflict_detected", "INTEGER DEFAULT 0"),
-                ("conflict_details", "TEXT"),
-            ])
-            self._migrate_table(conn, "evaluation_details", [
-                ("top_1_root_cause_hit", "INTEGER DEFAULT 0"),
-                ("is_safe_recommendation", "INTEGER DEFAULT 1"),
-            ])
+    def _run_versioned_migrations(self, conn: sqlite3.Connection) -> None:
+        """Execute pending versioned migrations in order with transactional rollback safety."""
+        cursor = conn.cursor()
+        cursor.execute("SELECT version FROM schema_migrations")
+        applied_versions = {row[0] for row in cursor.fetchall()}
+
+        migrations = [
+            (1, "core_tables_v1", self._migration_v1_core_tables),
+            (2, "incident_verification_v2", self._migration_v2_incident_verification),
+            (3, "investigation_structured_v3", self._migration_v3_investigation_structured),
+            (4, "resolution_multistage_v4", self._migration_v4_resolution_multistage),
+            (5, "evaluation_16_dimensions_v5", self._migration_v5_evaluation_16d),
+        ]
+
+        for version, name, func in migrations:
+            if version not in applied_versions:
+                try:
+                    with conn:
+                        func(conn)
+                        from datetime import datetime, timezone
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        conn.execute(
+                            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+                            (version, name, now_str)
+                        )
+                except Exception as e:
+                    import logging
+                    logging.getLogger("opsrecall.db").error(f"Migration {version} ({name}) failed: {e}")
+                    raise RuntimeError(f"Database migration {version} ({name}) failed: {e}") from e
+
+    def _migration_v1_core_tables(self, conn: sqlite3.Connection) -> None:
+        """Version 1: Create core initial audit tables."""
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS incidents (
+                incident_id TEXT PRIMARY KEY,
+                incident_title TEXT NOT NULL,
+                affected_service TEXT NOT NULL,
+                incident_timestamp TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                symptoms TEXT NOT NULL,
+                error_logs TEXT NOT NULL,
+                metrics TEXT NOT NULL,
+                deployment_id TEXT,
+                deployment_or_change TEXT,
+                suspected_cause TEXT,
+                actual_verified_root_cause TEXT,
+                is_verified INTEGER DEFAULT 0,
+                verified_by TEXT,
+                verified_at TEXT,
+                diagnostic_actions_attempted TEXT,
+                failed_mitigation_attempts TEXT,
+                successful_mitigation TEXT,
+                resolution TEXT,
+                resolution_outcome TEXT,
+                verification_evidence TEXT,
+                lessons_learned TEXT,
+                content_hash TEXT,
+                data_type TEXT DEFAULT 'SIMULATED_INCIDENT',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investigations (
+                investigation_id TEXT PRIMARY KEY,
+                incident_id TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                retrieval_mode_label TEXT DEFAULT 'DISABLED',
+                executive_summary TEXT,
+                hypotheses TEXT NOT NULL,
+                recalled_memories TEXT,
+                structured_retrievals TEXT,
+                historical_incidents_referenced TEXT,
+                previous_failed_approaches TEXT,
+                memory_contradictions_detected TEXT,
+                recommended_remediation_steps TEXT,
+                confidence_level TEXT,
+                llm_model TEXT,
+                execution_time_seconds REAL,
+                created_at TEXT NOT NULL,
+                raw_result TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS resolutions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incident_id TEXT NOT NULL,
+                verified_root_cause TEXT NOT NULL,
+                successful_resolution TEXT NOT NULL,
+                failed_approaches TEXT NOT NULL,
+                verification_evidence TEXT,
+                lessons_learned TEXT,
+                verified_by TEXT,
+                status TEXT DEFAULT 'FEEDBACK_RECEIVED',
+                retained_to_hindsight INTEGER DEFAULT 0,
+                hindsight_operation_id TEXT,
+                error_message TEXT,
+                conflict_detected INTEGER DEFAULT 0,
+                conflict_details TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_runs (
+                run_id TEXT PRIMARY KEY,
+                run_timestamp TEXT NOT NULL,
+                cases_evaluated INTEGER NOT NULL,
+                accuracy_enabled REAL NOT NULL,
+                accuracy_disabled REAL NOT NULL,
+                avoidance_enabled REAL NOT NULL,
+                avoidance_disabled REAL NOT NULL,
+                avg_score_enabled REAL NOT NULL,
+                avg_score_disabled REAL NOT NULL,
+                summary_json TEXT NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_details (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                case_id TEXT NOT NULL,
+                memory_mode TEXT NOT NULL,
+                top_1_root_cause_hit INTEGER DEFAULT 0,
+                top_3_root_cause_hit INTEGER NOT NULL,
+                retrieved_expected_historical INTEGER NOT NULL,
+                recalled_failed_mitigations INTEGER NOT NULL,
+                avoided_unsuccessful_mitigations INTEGER NOT NULL,
+                false_recall_flagged INTEGER NOT NULL,
+                appropriate_uncertainty INTEGER NOT NULL,
+                is_safe_recommendation INTEGER DEFAULT 1,
+                overall_score REAL NOT NULL,
+                explanation TEXT,
+                FOREIGN KEY (run_id) REFERENCES evaluation_runs (run_id)
+            )
+            """
+        )
+
+    def _migration_v2_incident_verification(self, conn: sqlite3.Connection) -> None:
+        """Version 2: Add verification and content hash columns to incidents."""
+        self._migrate_table(conn, "incidents", [
+            ("is_verified", "INTEGER DEFAULT 0"),
+            ("verified_by", "TEXT"),
+            ("verified_at", "TEXT"),
+            ("content_hash", "TEXT"),
+        ])
+
+    def _migration_v3_investigation_structured(self, conn: sqlite3.Connection) -> None:
+        """Version 3: Add structured retrieval and contradiction tracking to investigations."""
+        self._migrate_table(conn, "investigations", [
+            ("retrieval_mode_label", "TEXT DEFAULT 'DISABLED'"),
+            ("structured_retrievals", "TEXT"),
+            ("previous_failed_approaches", "TEXT"),
+            ("memory_contradictions_detected", "TEXT"),
+        ])
+
+    def _migration_v4_resolution_multistage(self, conn: sqlite3.Connection) -> None:
+        """Version 4: Add 5-stage feedback lifecycle and conflict columns to resolutions."""
+        self._migrate_table(conn, "resolutions", [
+            ("status", "TEXT DEFAULT 'FEEDBACK_RECEIVED'"),
+            ("error_message", "TEXT"),
+            ("conflict_detected", "INTEGER DEFAULT 0"),
+            ("conflict_details", "TEXT"),
+        ])
+
+    def _migration_v5_evaluation_16d(self, conn: sqlite3.Connection) -> None:
+        """Version 5: Add 16-dimensional benchmark columns to evaluation_details."""
+        self._migrate_table(conn, "evaluation_details", [
+            ("top_1_root_cause_hit", "INTEGER DEFAULT 0"),
+            ("is_safe_recommendation", "INTEGER DEFAULT 1"),
+            ("causal_reasoning_score", "REAL DEFAULT 0.0"),
+            ("evidence_grounding_score", "REAL DEFAULT 0.0"),
+            ("retrieval_precision", "REAL DEFAULT 0.0"),
+            ("retrieval_recall", "REAL DEFAULT 0.0"),
+            ("reciprocal_rank", "REAL DEFAULT 0.0"),
+            ("action_quality_score", "REAL DEFAULT 0.0"),
+            ("confidence_calibration_error", "REAL DEFAULT 0.0"),
+            ("brier_score", "REAL DEFAULT 0.0"),
+        ])
 
     def _migrate_table(self, conn: sqlite3.Connection, table_name: str, columns: List[Tuple[str, str]]) -> None:
         """Add missing columns to an existing SQLite table if not present."""
@@ -410,8 +461,12 @@ class DatabaseManager:
                         run_id, case_id, memory_mode, top_1_root_cause_hit, top_3_root_cause_hit,
                         retrieved_expected_historical, recalled_failed_mitigations,
                         avoided_unsuccessful_mitigations, false_recall_flagged,
-                        appropriate_uncertainty, is_safe_recommendation, overall_score, explanation
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        appropriate_uncertainty, is_safe_recommendation,
+                        causal_reasoning_score, evidence_grounding_score,
+                        retrieval_precision, retrieval_recall, reciprocal_rank,
+                        action_quality_score, confidence_calibration_error, brier_score,
+                        overall_score, explanation
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         run_id,
@@ -425,6 +480,14 @@ class DatabaseManager:
                         1 if d.false_recall_flagged else 0,
                         1 if d.appropriate_uncertainty else 0,
                         1 if getattr(d, "is_safe_recommendation", True) else 0,
+                        getattr(d, "causal_reasoning_score", 0.0),
+                        getattr(d, "evidence_grounding_score", 0.0),
+                        getattr(d, "retrieval_precision", 0.0),
+                        getattr(d, "retrieval_recall", 0.0),
+                        getattr(d, "reciprocal_rank", 0.0),
+                        getattr(d, "action_quality_score", 0.0),
+                        getattr(d, "confidence_calibration_error", 0.0),
+                        getattr(d, "brier_score", 0.0),
                         d.overall_score,
                         d.explanation,
                     ),

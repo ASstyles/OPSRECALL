@@ -17,7 +17,7 @@ import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from config import settings
 from core.investigation import InvestigationEngine, get_investigation_engine
 from core.validators import (
@@ -268,7 +268,7 @@ class EvaluationFramework:
             is_safe = False
 
         # ----------------------------------------------------------------------
-        # Dimension 8: Uncertainty Calibration
+        # Dimension 8: Uncertainty Calibration (Probabilities, Brier & ECE)
         # ----------------------------------------------------------------------
         appropriate_uncertainty = True
         conf = result.confidence_level
@@ -277,16 +277,20 @@ class EvaluationFramework:
         elif gt.is_distractor and conf == "High":
             appropriate_uncertainty = False
 
-        # Compute Brier-style calibration error
-        conf_numeric = 0.9 if conf == "High" else (0.6 if conf == "Medium" else 0.3)
+        # Extract or map numerical probability
+        conf_numeric = getattr(result, "numerical_confidence", None)
+        if conf_numeric is None or conf_numeric <= 0.0:
+            conf_numeric = 0.90 if conf == "High" else (0.60 if conf == "Medium" else 0.30)
         actual_numeric = 1.0 if top_1_hit else 0.0
+
         calibration_error = abs(conf_numeric - actual_numeric)
+        brier_err = (conf_numeric - actual_numeric) ** 2
 
         # ----------------------------------------------------------------------
         # Dimension 9: Novel Incident Handling
         # ----------------------------------------------------------------------
         novel_score = 1.0
-        if gt.is_distractor:
+        if gt.is_distractor or gt.scenario_type in ["novel_incident", "novel_distractor"]:
             if result.historical_incidents_referenced:
                 novel_score = 0.0
             else:
@@ -401,6 +405,7 @@ class EvaluationFramework:
             is_safe_recommendation=is_safe,
             appropriate_uncertainty=appropriate_uncertainty,
             confidence_calibration_error=round(calibration_error, 3),
+            brier_score=round(brier_err, 3),
             novel_handling_score=novel_score,
             false_recall_flagged=false_recall,
             consistency_score=consistency_score,
@@ -470,6 +475,7 @@ class EvaluationFramework:
                     "hypotheses": [h.hypothesis for h in res_disabled.hypotheses[:2]],
                     "recommended_remediation": [r.description for r in res_disabled.recommended_remediation_steps[:1]],
                     "failed_approaches_warned": len(res_disabled.previous_failed_approaches),
+                    "confidence": res_disabled.confidence_level,
                     "model_used": res_disabled.llm_model,
                 },
                 "enabled": {
@@ -486,24 +492,32 @@ class EvaluationFramework:
                     "failed_approaches_warned": len(res_enabled.previous_failed_approaches),
                     "historical_refs": res_enabled.historical_incidents_referenced,
                     "retrieval_mode": res_enabled.retrieval_mode_label,
+                    "confidence": res_enabled.confidence_level,
                     "model_used": res_enabled.llm_model,
                 },
             })
 
-        # Calculate macro metrics across all 12 dimensions
+        # Calculate macro metrics across all 16 independent evaluation dimensions
         n_cases = len(case_comparisons)
         scores_dis = [d.overall_score for d in all_details if d.memory_mode == "MEMORY_DISABLED"]
         scores_enb = [d.overall_score for d in all_details if d.memory_mode == "MEMORY_ENABLED"]
 
+        # Dimension 1 & 2: Root Cause Accuracy
         top1_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.top_1_root_cause_hit) / n_cases * 100.0
         top1_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.top_1_root_cause_hit) / n_cases * 100.0
 
         top3_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.top_3_root_cause_hit) / n_cases * 100.0
         top3_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.top_3_root_cause_hit) / n_cases * 100.0
 
-        retrieval_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.retrieved_expected_historical) / n_cases * 100.0
-        retrieval_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.retrieved_expected_historical) / n_cases * 100.0
+        # Dimension 3: Causal Reasoning Quality
+        causal_dis = sum(d.causal_reasoning_score for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
+        causal_enb = sum(d.causal_reasoning_score for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
 
+        # Dimension 4: Evidence Grounding Rate
+        grounding_dis = sum(d.evidence_grounding_score for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
+        grounding_enb = sum(d.evidence_grounding_score for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
+
+        # Dimension 5, 6, 7 & 8: Retrieval Quality
         prec_dis = sum(d.retrieval_precision for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
         prec_enb = sum(d.retrieval_precision for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
 
@@ -513,24 +527,47 @@ class EvaluationFramework:
         mrr_dis = sum(d.reciprocal_rank for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases
         mrr_enb = sum(d.reciprocal_rank for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases
 
+        retrieval_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.retrieved_expected_historical) / n_cases * 100.0
+        retrieval_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.retrieved_expected_historical) / n_cases * 100.0
+
+        # Dimension 9: Failed Mitigation Avoidance
         avoid_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.avoided_unsuccessful_mitigations) / n_cases * 100.0
         avoid_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.avoided_unsuccessful_mitigations) / n_cases * 100.0
 
+        # Dimension 10: Recommendation Quality
+        action_q_dis = sum(d.action_quality_score for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
+        action_q_enb = sum(d.action_quality_score for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
+
+        # Dimension 11: Recommendation Safety
         safety_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.is_safe_recommendation) / n_cases * 100.0
         safety_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.is_safe_recommendation) / n_cases * 100.0
 
+        # Dimension 12: False Recall Resistance (Lower is Better)
         false_recall_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.false_recall_flagged) / n_cases * 100.0
         false_recall_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.false_recall_flagged) / n_cases * 100.0
 
-        grounding_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.recommendation_grounding) / n_cases * 100.0
-        grounding_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.recommendation_grounding) / n_cases * 100.0
+        # Dimension 13: Novel Incident Handling
+        novel_dis = sum(d.novel_handling_score for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
+        novel_enb = sum(d.novel_handling_score for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
 
-        uncertainty_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.appropriate_uncertainty) / n_cases * 100.0
-        uncertainty_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.appropriate_uncertainty) / n_cases * 100.0
+        # Dimension 14: Confidence Calibration (Brier Score & ECE with 3 reliability bins)
+        confs_dis = [0.90 if c["disabled"].get("confidence", "Medium") == "High" else (0.60 if c["disabled"].get("confidence", "Medium") == "Medium" else 0.30) for c in case_comparisons]
+        hits_dis = [c["disabled"]["top_1_hit"] for c in case_comparisons]
+        brier_dis, ece_dis, bins_dis = self._compute_calibration(confs_dis, hits_dis)
 
-        ece_dis = sum(d.confidence_calibration_error for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases
-        ece_enb = sum(d.confidence_calibration_error for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases
+        confs_enb = [0.90 if c["enabled"].get("confidence", "Medium") == "High" else (0.60 if c["enabled"].get("confidence", "Medium") == "Medium" else 0.30) for c in case_comparisons]
+        hits_enb = [c["enabled"]["top_1_hit"] for c in case_comparisons]
+        brier_enb, ece_enb, bins_enb = self._compute_calibration(confs_enb, hits_enb)
 
+        # Dimension 15: Investigation Consistency
+        consistency_dis = sum(d.consistency_score for d in all_details if d.memory_mode == "MEMORY_DISABLED") / n_cases * 100.0
+        consistency_enb = sum(d.consistency_score for d in all_details if d.memory_mode == "MEMORY_ENABLED") / n_cases * 100.0
+
+        # Dimension 16: Human Verification Compliance
+        human_compliance_dis = sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.human_verification_compliant) / n_cases * 100.0
+        human_compliance_enb = sum(1 for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.human_verification_compliant) / n_cases * 100.0
+
+        # Composite Score
         avg_dis = sum(scores_dis) / len(scores_dis) if scores_dis else 0.0
         avg_enb = sum(scores_enb) / len(scores_enb) if scores_enb else 0.0
 
@@ -541,21 +578,32 @@ class EvaluationFramework:
             "model_configured": settings.GROQ_MODEL,
             "hindsight_bank": settings.HINDSIGHT_BANK_ID,
             "hindsight_status": hindsight_mode,
-            "evaluation_standard": "OPSRECALL-12D-STRUCTURED-RUBRIC",
+            "evaluation_standard": "OPSRECALL-16D-SCIENTIFIC-BENCHMARK",
             "metrics": {
                 "top_1_root_cause_accuracy": {"memory_enabled": round(top1_enb, 1), "memory_disabled": round(top1_dis, 1)},
                 "top_3_root_cause_accuracy": {"memory_enabled": round(top3_enb, 1), "memory_disabled": round(top3_dis, 1)},
+                "causal_reasoning_quality": {"memory_enabled": round(causal_enb, 1), "memory_disabled": round(causal_dis, 1)},
+                "evidence_grounding_rate": {"memory_enabled": round(grounding_enb, 1), "memory_disabled": round(grounding_dis, 1)},
                 "retrieval_precision_pct": {"memory_enabled": round(prec_enb, 1), "memory_disabled": round(prec_dis, 1)},
                 "retrieval_recall_pct": {"memory_enabled": round(recall_enb, 1), "memory_disabled": round(recall_dis, 1)},
                 "mean_reciprocal_rank": {"memory_enabled": round(mrr_enb, 3), "memory_disabled": round(mrr_dis, 3)},
                 "relevant_memory_retrieval_rate": {"memory_enabled": round(retrieval_enb, 1), "memory_disabled": round(retrieval_dis, 1)},
                 "failed_mitigation_avoidance_rate": {"memory_enabled": round(avoid_enb, 1), "memory_disabled": round(avoid_dis, 1)},
+                "recommendation_action_quality": {"memory_enabled": round(action_q_enb, 1), "memory_disabled": round(action_q_dis, 1)},
                 "recommendation_safety_rate": {"memory_enabled": round(safety_enb, 1), "memory_disabled": round(safety_dis, 1)},
                 "false_historical_recall_rate": {"memory_enabled": round(false_recall_enb, 1), "memory_disabled": round(false_recall_dis, 1)},
-                "recommendation_grounding_rate": {"memory_enabled": round(grounding_enb, 1), "memory_disabled": round(grounding_dis, 1)},
-                "appropriate_uncertainty_rate": {"memory_enabled": round(uncertainty_enb, 1), "memory_disabled": round(uncertainty_dis, 1)},
+                "novel_incident_handling_rate": {"memory_enabled": round(novel_enb, 1), "memory_disabled": round(novel_dis, 1)},
+                "brier_score": {"memory_enabled": round(brier_enb, 3), "memory_disabled": round(brier_dis, 3)},
                 "expected_calibration_error": {"memory_enabled": round(ece_enb, 3), "memory_disabled": round(ece_dis, 3)},
+                "investigation_consistency_rate": {"memory_enabled": round(consistency_enb, 1), "memory_disabled": round(consistency_dis, 1)},
+                "human_verification_compliance_rate": {"memory_enabled": round(human_compliance_enb, 1), "memory_disabled": round(human_compliance_dis, 1)},
                 "composite_score": {"memory_enabled": round(avg_enb, 1), "memory_disabled": round(avg_dis, 1)},
+            },
+            "calibration_details": {
+                "bins_memory_enabled": bins_enb,
+                "bins_memory_disabled": bins_dis,
+                "sample_size": n_cases,
+                "notes": "Partitioned into 3 reliability bins: Low [0, 0.4), Med [0.4, 0.7), High [0.7, 1.0]. Evaluated against Top-1 correctness labels."
             },
             "cases": case_comparisons,
         }
@@ -601,6 +649,49 @@ class EvaluationFramework:
             logger.warning(f"Could not write {out_file}: {e}")
 
         return summary
+
+    @staticmethod
+    def _compute_calibration(
+        confidences: List[float],
+        outcomes: List[bool],
+        num_bins: int = 3,
+    ) -> Tuple[float, float, List[Dict[str, Any]]]:
+        """Compute Brier score, ECE, and reliability bin statistics."""
+        bin_edges = [0.0, 0.4, 0.7, 1.0]
+        bin_details = []
+        total = len(confidences)
+        if total == 0:
+            return 0.0, 0.0, []
+
+        brier = sum((c - (1.0 if o else 0.0)) ** 2 for c, o in zip(confidences, outcomes)) / total
+        ece = 0.0
+
+        for i in range(len(bin_edges) - 1):
+            low, high = bin_edges[i], bin_edges[i + 1]
+            bin_indices = [
+                j for j, c in enumerate(confidences)
+                if (low <= c < high) or (i == len(bin_edges) - 2 and low <= c <= high)
+            ]
+            count = len(bin_indices)
+            if count > 0:
+                avg_conf = sum(confidences[j] for j in bin_indices) / count
+                avg_acc = sum(1.0 if outcomes[j] else 0.0 for j in bin_indices) / count
+                ece += (count / total) * abs(avg_acc - avg_conf)
+                bin_details.append({
+                    "bin_range": f"[{low:.1f}, {high:.1f}]",
+                    "count": count,
+                    "avg_confidence": round(avg_conf, 3),
+                    "avg_accuracy": round(avg_acc, 3),
+                })
+            else:
+                bin_details.append({
+                    "bin_range": f"[{low:.1f}, {high:.1f}]",
+                    "count": 0,
+                    "avg_confidence": 0.0,
+                    "avg_accuracy": 0.0,
+                })
+
+        return round(brier, 3), round(ece, 3), bin_details
 
 
 def re_sub_symbols(text: str) -> str:

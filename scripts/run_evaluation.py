@@ -1,7 +1,7 @@
 """
 CLI Evaluation Runner for OPSRECALL.
 Executes reproducible benchmarks evaluating incident diagnosis performance
-with Hindsight Memory Enabled vs. Memory Disabled across 16 scenarios and 12 evaluation dimensions.
+with Hindsight Memory Enabled vs. Memory Disabled across 16 scenarios and 16 evaluation dimensions.
 Usage:
     python scripts/run_evaluation.py
 """
@@ -19,9 +19,9 @@ from core.evaluation import get_evaluation_framework
 
 def main() -> int:
     print("================================================================================")
-    print("OPSRECALL -- 12-DIMENSIONAL INCIDENT BENCHMARK EVALUATION")
+    print("OPSRECALL -- 16-DIMENSIONAL INCIDENT BENCHMARK EVALUATION")
     print("================================================================================")
-    print("Evaluating Root Cause Accuracy, Failed Mitigation Avoidance, Safety & Provenance...")
+    print("Evaluating Root Cause Accuracy, Retrieval Quality, Safety, Calibration & Consistency...")
     print("--------------------------------------------------------------------------------")
 
     eval_fw = get_evaluation_framework()
@@ -55,34 +55,44 @@ def main() -> int:
         print(f"{c_id:<9} | {svc:<25} | {cat:<18} | {sc_off:<8.1f} | {sc_on:<8.1f} | {delta_str:<7}")
 
     print("=" * 88)
-    print("MACRO BENCHMARK RESULTS (12 INDEPENDENT EVALUATION DIMENSIONS):")
+    print("MACRO BENCHMARK RESULTS (16 INDEPENDENT EVALUATION DIMENSIONS):")
     print("--------------------------------------------------------------------------------")
     top1 = metrics.get("top_1_root_cause_accuracy", {})
     top3 = metrics.get("top_3_root_cause_accuracy", {})
+    causal = metrics.get("causal_reasoning_quality", {})
+    grounding = metrics.get("evidence_grounding_rate", {})
     prec = metrics.get("retrieval_precision_pct", {})
     recall = metrics.get("retrieval_recall_pct", {})
     mrr = metrics.get("mean_reciprocal_rank", {})
     retrieval = metrics.get("relevant_memory_retrieval_rate", {})
     avoid = metrics.get("failed_mitigation_avoidance_rate", {})
+    action_q = metrics.get("recommendation_action_quality", {})
     safety = metrics.get("recommendation_safety_rate", {})
     false_rec = metrics.get("false_historical_recall_rate", {})
-    grounding = metrics.get("recommendation_grounding_rate", {})
-    uncertainty = metrics.get("appropriate_uncertainty_rate", {})
+    novel = metrics.get("novel_incident_handling_rate", {})
+    brier = metrics.get("brier_score", {})
     ece = metrics.get("expected_calibration_error", {})
+    consistency = metrics.get("investigation_consistency_rate", {})
+    human = metrics.get("human_verification_compliance_rate", {})
     composite = metrics.get("composite_score", {})
 
     print(f" 1. Top-1 Root Cause Accuracy:       Memory OFF: {top1.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {top1.get('memory_enabled', 0):>5.1f}%")
     print(f" 2. Top-3 Root Cause Accuracy:       Memory OFF: {top3.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {top3.get('memory_enabled', 0):>5.1f}%")
-    print(f" 3. Retrieval Precision@k:           Memory OFF: {prec.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {prec.get('memory_enabled', 0):>5.1f}%")
-    print(f" 4. Retrieval Recall@k:              Memory OFF: {recall.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {recall.get('memory_enabled', 0):>5.1f}%")
-    print(f" 5. Mean Reciprocal Rank (MRR):      Memory OFF: {mrr.get('memory_disabled', 0):>5.3f}   |  Memory ON: {mrr.get('memory_enabled', 0):>5.3f}")
-    print(f" 6. Relevant Memory Retrieval Rate:  Memory OFF: {retrieval.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {retrieval.get('memory_enabled', 0):>5.1f}%")
-    print(f" 7. Failed Mitigation Avoidance:     Memory OFF: {avoid.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {avoid.get('memory_enabled', 0):>5.1f}%")
-    print(f" 8. Recommendation Safety:           Memory OFF: {safety.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {safety.get('memory_enabled', 0):>5.1f}%")
-    print(f" 9. False Recall Rate (Lower=Better):Memory OFF: {false_rec.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {false_rec.get('memory_enabled', 0):>5.1f}%")
-    print(f"10. Evidence Grounding Rate:         Memory OFF: {grounding.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {grounding.get('memory_enabled', 0):>5.1f}%")
-    print(f"11. Appropriate Uncertainty Rate:    Memory OFF: {uncertainty.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {uncertainty.get('memory_enabled', 0):>5.1f}%")
-    print(f"12. Calibration Error (ECE - Lower): Memory OFF: {ece.get('memory_disabled', 0):>5.3f}   |  Memory ON: {ece.get('memory_enabled', 0):>5.3f}")
+    print(f" 3. Causal Reasoning Quality:        Memory OFF: {causal.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {causal.get('memory_enabled', 0):>5.1f}%")
+    print(f" 4. Evidence Grounding Rate:         Memory OFF: {grounding.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {grounding.get('memory_enabled', 0):>5.1f}%")
+    print(f" 5. Retrieval Precision@k:           Memory OFF: {prec.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {prec.get('memory_enabled', 0):>5.1f}%")
+    print(f" 6. Retrieval Recall@k:              Memory OFF: {recall.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {recall.get('memory_enabled', 0):>5.1f}%")
+    print(f" 7. Mean Reciprocal Rank (MRR):      Memory OFF: {mrr.get('memory_disabled', 0):>5.3f}   |  Memory ON: {mrr.get('memory_enabled', 0):>5.3f}")
+    print(f" 8. Relevant Memory Retrieval Rate:  Memory OFF: {retrieval.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {retrieval.get('memory_enabled', 0):>5.1f}%")
+    print(f" 9. Failed Mitigation Avoidance:     Memory OFF: {avoid.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {avoid.get('memory_enabled', 0):>5.1f}%")
+    print(f"10. Recommendation Action Quality:   Memory OFF: {action_q.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {action_q.get('memory_enabled', 0):>5.1f}%")
+    print(f"11. Recommendation Safety Rate:      Memory OFF: {safety.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {safety.get('memory_enabled', 0):>5.1f}%")
+    print(f"12. False Recall Rate (Lower=Better):Memory OFF: {false_rec.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {false_rec.get('memory_enabled', 0):>5.1f}%")
+    print(f"13. Novel Incident Handling Rate:    Memory OFF: {novel.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {novel.get('memory_enabled', 0):>5.1f}%")
+    print(f"14. Confidence Calibration:          Memory OFF: Brier={brier.get('memory_disabled', 0):.3f}, ECE={ece.get('memory_disabled', 0):.3f}")
+    print(f"                                     Memory ON:  Brier={brier.get('memory_enabled', 0):.3f}, ECE={ece.get('memory_enabled', 0):.3f}")
+    print(f"15. Investigation Consistency Rate:  Memory OFF: {consistency.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {consistency.get('memory_enabled', 0):>5.1f}%")
+    print(f"16. Human Verification Compliance:   Memory OFF: {human.get('memory_disabled', 0):>5.1f}%  |  Memory ON: {human.get('memory_enabled', 0):>5.1f}%")
     print("--------------------------------------------------------------------------------")
     print(f"COMPOSITE NORMALIZED SCORE (0-100):  Memory OFF: {composite.get('memory_disabled', 0):>5.1f}   |  Memory ON: {composite.get('memory_enabled', 0):>5.1f}")
     print("--------------------------------------------------------------------------------")

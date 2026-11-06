@@ -83,14 +83,14 @@ Having persistent operational memory turned a dangerous recommendation into an i
 
 **[ON-SCREEN CUE]**:  
 *Click sidebar -> Navigate to **Learning Center**. Show the verification form and historical postmortem records.  
-Then click **Evaluation Lab**. Show the benchmark summary comparing Memory OFF vs Memory ON across 16 scenarios and 12 evaluation dimensions.*
+Then click **Evaluation Lab**. Show the benchmark summary comparing Memory OFF vs Memory ON across 16 scenarios and 16 evaluation dimensions.*
 
 **SPEAKER**:  
 "OPSRECALL enforces strict operational safety. It is an advisory tool—it never runs destructive commands. 
 
 In the **Learning Center**, engineers verify the actual root cause and successful mitigation through a 5-stage pipeline before retaining new experience into Hindsight.
 
-In our **Evaluation Lab**, we run reproducible benchmarks across 16 test scenarios and 12 dimensions, including holdout edge cases, table lock contention, CoreDNS failures, and novel distractors. 
+In our **Evaluation Lab**, we run reproducible benchmarks across 16 test scenarios and 16 dimensions, including holdout edge cases, table lock contention, CoreDNS failures, and novel distractors. 
 
 On recurrent incidents, memory-enabled investigations score +40.5 points higher than baseline, specifically because they avoid historical failed fixes and pinpoint root causes. And on novel distractor cases, Hindsight correctly avoids false recalls."
 

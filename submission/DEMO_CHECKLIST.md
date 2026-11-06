@@ -117,5 +117,5 @@ streamlit run app.py
   - Select **`Evaluation Lab`**.
   - Click **`Run Benchmark Evaluation`**.
 - **What to highlight**:
-  - Evaluates 16 scenarios across 12 distinct dimensions with complete ground-truth anti-leakage isolation.
+  - Evaluates 16 scenarios across 16 distinct dimensions with complete ground-truth anti-leakage isolation.
   - Shows +25.0% Top-1 root cause accuracy gain, +100.0% relevance retrieval gain, and +40.5 points improvement on recurrent incident resolution.

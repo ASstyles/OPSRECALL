@@ -130,22 +130,30 @@ class StructuredRetrievalResult(BaseModel):
 
 
 class Hypothesis(BaseModel):
-    """A root-cause hypothesis with evidence grounding."""
+    """A root-cause hypothesis with evidence grounding and probabilistic calibration."""
 
     rank: int = Field(..., ge=1, le=5)
     hypothesis: str
     supporting_evidence: List[str] = Field(default_factory=list)
+    contradictory_evidence: List[str] = Field(default_factory=list)
     likelihood: Literal["High", "Medium", "Low"] = "Medium"
+    probability: float = Field(default=0.5, ge=0.0, le=1.0)
     historical_precedent: Optional[str] = None
+    missing_evidence: List[str] = Field(default_factory=list)
+    validation_procedure: Optional[str] = None
 
 
 class ActionRecommendation(BaseModel):
-    """Recommended diagnostic or remediation action."""
+    """Recommended diagnostic or remediation action with formal safety classification."""
 
     step_number: int
     action_type: Literal["Diagnostic", "Remediation", "Verification"]
+    safety_classification: Literal["Diagnostic", "Read-only", "Reversible", "Potentially disruptive", "Destructive", "Prohibited"] = "Read-only"
     description: str
     rationale: str
+    expected_impact: str = ""
+    preconditions: List[str] = Field(default_factory=list)
+    verification_steps: List[str] = Field(default_factory=list)
     potential_risks: str = "Low risk if followed according to SOP."
     commands_or_checks: List[str] = Field(default_factory=list)
     requires_human_approval: bool = True
@@ -181,6 +189,7 @@ class InvestigationResult(BaseModel):
     recommended_remediation_steps: List[ActionRecommendation] = Field(default_factory=list)
     confidence_level: Literal["High", "Medium", "Low"] = "Medium"
     confidence_explanation: str
+    numerical_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     missing_information: List[str] = Field(default_factory=list)
     requires_human_intervention: bool = True
     is_simulated: bool = True
@@ -220,7 +229,7 @@ class ResolutionFeedback(BaseModel):
 class CaseEvaluationScore(BaseModel):
     """
     Comprehensive benchmark score for a single evaluation scenario.
-    Captures all 12 operational evaluation dimensions.
+    Captures all 16 operational evaluation dimensions.
     """
 
     case_id: str
@@ -257,6 +266,7 @@ class CaseEvaluationScore(BaseModel):
     # 8. Calibration & Uncertainty
     appropriate_uncertainty: bool = True
     confidence_calibration_error: float = 0.0
+    brier_score: float = 0.0
 
     # 9. Novel Incident Handling
     novel_handling_score: float = 1.0

@@ -1,0 +1,66 @@
+name: OPSRECALL CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test & Evaluate (Hermetic)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip"
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install ruff
+
+    - name: Lint and Code Style Check
+      run: |
+        ruff check . --ignore E501,F401,F841
+
+    - name: Verify Import Integrity
+      run: |
+        python -c "import config; import core.evaluation; import core.investigation; import core.memory_manager; import core.llm_engine; import core.learning_engine; import database.db; print('Import verification passed!')"
+
+    - name: Validate Benchmark Dataset & Anti-Leakage Separation
+      run: |
+        python -c "
+        from core.evaluation import EvaluationFramework
+        ef = EvaluationFramework()
+        cases = ef.load_evaluation_cases()
+        gt = ef.load_ground_truth()
+        assert len(cases) == 16, f'Expected 16 cases, got {len(cases)}'
+        assert len(gt) == 16, f'Expected 16 ground truth keys, got {len(gt)}'
+        for c in cases:
+            d = c.model_dump()
+            assert 'ground_truth_root_cause' not in d, 'Leakage detected!'
+            assert 'unsuccessful_mitigations_to_avoid' not in d, 'Leakage detected!'
+        print('Anti-leakage validation passed: 16 cases strictly isolated.')
+        "
+
+    - name: Run Hermetic Automated Test Suite (Pytest)
+      run: |
+        python -m pytest -v
+
+    - name: Run 16-Dimensional Benchmark Evaluation
+      run: |
+        python scripts/run_evaluation.py
+
+    - name: Verify CLI Scripts Health & Exit Codes
+      run: |
+        python scripts/verify_groq.py
+        python scripts/verify_hindsight.py
+        python scripts/seed_incidents.py

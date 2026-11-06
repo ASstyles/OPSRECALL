@@ -90,7 +90,7 @@ When the engineer clicks **💾 Confirm Resolution & Retain into Hindsight**, th
 *Click sidebar -> **Evaluation Lab**. Display the 16-case benchmark chart and macro KPI cards.*
 
 **Speaker**:  
-"We validated this architecture across a rigorous 16-scenario benchmark across 12 evaluation dimensions with completely isolated ground truth. 
+"We validated this architecture across a rigorous 16-scenario benchmark across 16 evaluation dimensions with completely isolated ground truth. 
 
 On recurrent incidents, Hindsight memory improves resolution scores by **+40.5 points** (59.5 to 100.0) with a **+25.0% lift in Top-1 accuracy** while flagging **100% of historical failed mitigations** and maintaining zero false recalls on novel edge cases.
 
