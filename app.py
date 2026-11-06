@@ -501,16 +501,14 @@ if selected_page == "Command Center":
         st.subheader("🌐 Monitored Service Health")
         services = incident_engine.get_service_health_summary()
         if services:
-            df_svc = pd.DataFrame(services)
-            df_svc.rename(
+            df_svc = pd.DataFrame(services).rename(
                 columns={
                     "service_name": "Service",
                     "incident_count": "Incidents",
                     "sev1_count": "SEV-1 Events",
                     "latest_severity": "Recent Severity",
                     "latest_incident_time": "Last Event",
-                },
-                inplace=True,
+                }
             )
             st.dataframe(df_svc, hide_index=True, use_container_width=True)
         else:
@@ -522,8 +520,7 @@ if selected_page == "Command Center":
             df_recent = pd.DataFrame(recents)
             df_recent = df_recent[
                 ["investigation_id", "incident_id", "mode", "confidence_level", "execution_time_seconds", "created_at"]
-            ]
-            df_recent.rename(
+            ].rename(
                 columns={
                     "investigation_id": "Investigation ID",
                     "incident_id": "Incident Ref",
@@ -531,8 +528,7 @@ if selected_page == "Command Center":
                     "confidence_level": "Confidence",
                     "execution_time_seconds": "Duration (s)",
                     "created_at": "Timestamp",
-                },
-                inplace=True,
+                }
             )
             st.dataframe(df_recent, hide_index=True, use_container_width=True)
         else:
@@ -1148,9 +1144,20 @@ elif selected_page == "Evaluation Lab":
         composite = metrics.get("composite_score", {})
         h_status = summary.get("hindsight_status", "OFFLINE_PREVIEW")
 
+        n_eval = summary.get("cases_evaluated", 16)
+        safety_val = safety.get("memory_enabled", 0)
+        unsafe_count = round((100.0 - safety_val) / 100.0 * n_eval) if safety_val < 100 else 0
+        safety_sub = f"{n_eval - unsafe_count}/{n_eval} Scenarios Safe" if unsafe_count > 0 else "All Scenarios Safe"
+        avoid_val = avoid.get("memory_enabled", 0)
+        avoid_sub = f"{avoid_val:.1f}% Verified Avoidance"
+
         st.caption(
             f"Benchmark Run ID: `{summary.get('run_id')}` | Timestamp: `{summary.get('run_timestamp')}` | Mode: `{h_status}`"
         )
+        if h_status == "OFFLINE_PREVIEW":
+            st.info(
+                f"**Evaluation Environment Note**: Benchmark run `{summary.get('run_id')}` evaluated across {n_eval} scenarios in **Offline Preview Mode** using local postmortem caches. Real-world incident resolution depends on live cloud indexing with TEMPR search."
+            )
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -1169,8 +1176,8 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Failed Fix Avoidance</div>
-                    <div class="sre-kpi-value" style="color: #34d399;">{avoid.get("memory_enabled", 0)}%</div>
-                    <div class="sre-kpi-sub">100% Pitfalls Flagged</div>
+                    <div class="sre-kpi-value" style="color: #34d399;">{avoid_val}%</div>
+                    <div class="sre-kpi-sub">{avoid_sub}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1180,8 +1187,8 @@ elif selected_page == "Evaluation Lab":
                 f"""
                 <div class="sre-card">
                     <div class="sre-kpi-label">Recommendation Safety</div>
-                    <div class="sre-kpi-value" style="color: #38bdf8;">{safety.get("memory_enabled", 0)}%</div>
-                    <div class="sre-kpi-sub">Zero Unsafe Commands</div>
+                    <div class="sre-kpi-value" style="color: #38bdf8;">{safety_val}%</div>
+                    <div class="sre-kpi-sub">{safety_sub}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,

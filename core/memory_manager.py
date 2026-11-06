@@ -15,6 +15,7 @@ from typing import Any
 
 from core.hindsight_client import HindsightClientWrapper, get_hindsight_client
 from core.validators import (
+    ActionEquivalenceEvaluation,
     FailedApproachWarning,
     Incident,
     RecalledMemoryItem,
@@ -22,6 +23,120 @@ from core.validators import (
 )
 
 logger = logging.getLogger("opsrecall.memory")
+
+
+# SRE Operational Action Semantic Clusters for Equivalence Matching and Risk Detection
+ACTION_SEMANTIC_CLUSTERS: dict[str, dict[str, Any]] = {
+    "HORIZONTAL_SCALE": {
+        "intent": "Expand application or worker replica count",
+        "keywords": [
+            "scale",
+            "replicas",
+            "hpa",
+            "autoscale",
+            "instances",
+            "worker pool",
+            "horizontal scale",
+            "add pods",
+            "scale out",
+        ],
+        "harmful_symptoms": [
+            "nodememorypressure",
+            "max_connections",
+            "connection pool",
+            "lock contention",
+            "table lock",
+            "database cpu",
+        ],
+        "failure_explanation": (
+            "Scaling worker replicas increases load or memory pressure without addressing the underlying bottleneck."
+        ),
+    },
+    "CACHE_FLUSH": {
+        "intent": "Flush or purge in-memory cache",
+        "keywords": [
+            "flush",
+            "flushall",
+            "flushdb",
+            "clear cache",
+            "purge cache",
+            "evict keys",
+            "redis-cli flush",
+        ],
+        "harmful_symptoms": [
+            "cache miss",
+            "stampede",
+            "database cpu",
+            "connection pool",
+            "high qps",
+            "dog-piling",
+        ],
+        "failure_explanation": (
+            "Flushing cache under load causes instantaneous cache stampede and saturates backend database."
+        ),
+    },
+    "RETRY_AGGRESSIVE": {
+        "intent": "Increase client retry count or decrease backoff delay",
+        "keywords": [
+            "retry count",
+            "max retries",
+            "retry limit",
+            "retry immediately",
+            "shorten backoff",
+            "increase retries",
+        ],
+        "harmful_symptoms": [
+            "cascading",
+            "timeout cascade",
+            "upstream latency",
+            "socket pool",
+            "retry storm",
+            "504 gateway",
+        ],
+        "failure_explanation": ("Aggressive retries amplify traffic against already failing upstream dependencies."),
+    },
+    "RESTART_PODS": {
+        "intent": "Rollout restart or kill deployment instances",
+        "keywords": [
+            "restart",
+            "rollout restart",
+            "kill pod",
+            "reboot deployment",
+            "redeploy",
+        ],
+        "harmful_symptoms": [
+            "table lock",
+            "ddl migration",
+            "lock contention",
+            "schema lock",
+            "deadlock",
+        ],
+        "failure_explanation": (
+            "Restarting application instances during database lock contention causes all pods to pile up in startup checkouts."
+        ),
+    },
+    "POOL_EXPANSION_OVERCOMMIT": {
+        "intent": "Increase database connection pool size",
+        "keywords": [
+            "max_connections",
+            "max_pool_size",
+            "expand pool",
+            "raise connection limit",
+            "increase pool size",
+            "pool capacity",
+        ],
+        "harmful_symptoms": [
+            "database cpu",
+            "db memory",
+            "pg_stat_activity",
+            "postgres memory",
+            "oom",
+        ],
+        "failure_explanation": (
+            "Expanding client connection pools when database is already saturated causes Postgres connection thrashing and OOM."
+        ),
+    },
+}
 
 
 class MemoryManager:
@@ -512,25 +627,188 @@ class MemoryManager:
 
         return warnings
 
+    @classmethod
+    def detect_action_cluster(cls, text: str) -> str | None:
+        """Detect operational semantic intent category for an action description."""
+        t = text.lower()
+        # Cache flush category
+        if any(kw in t for kw in ACTION_SEMANTIC_CLUSTERS["CACHE_FLUSH"]["keywords"]) or (
+            "cache" in t and any(w in t for w in ["clear", "flush", "purge", "evict", "reset", "wipe", "drop"])
+        ):
+            return "CACHE_FLUSH"
+
+        # Database pool expansion category
+        if any(kw in t for kw in ACTION_SEMANTIC_CLUSTERS["POOL_EXPANSION_OVERCOMMIT"]["keywords"]) or (
+            "pool" in t and any(w in t for w in ["increase", "expand", "raise", "size", "max_connections", "capacity"])
+        ):
+            return "POOL_EXPANSION_OVERCOMMIT"
+
+        # Horizontal pod/worker scaling category
+        if any(kw in t for kw in ACTION_SEMANTIC_CLUSTERS["HORIZONTAL_SCALE"]["keywords"]) or (
+            any(w in t for w in ["scale", "replicas", "autoscale", "instances", "workers"]) and "pool" not in t
+        ):
+            return "HORIZONTAL_SCALE"
+
+        # Aggressive retries category
+        if any(kw in t for kw in ACTION_SEMANTIC_CLUSTERS["RETRY_AGGRESSIVE"]["keywords"]) or (
+            "retry" in t or "retries" in t or "backoff" in t
+        ):
+            return "RETRY_AGGRESSIVE"
+
+        # Restart pods category
+        if any(kw in t for kw in ACTION_SEMANTIC_CLUSTERS["RESTART_PODS"]["keywords"]) or (
+            "restart" in t or "reboot" in t or "redeploy" in t
+        ):
+            return "RESTART_PODS"
+
+        return None
+
+    @classmethod
+    def compare_action_semantics(
+        cls,
+        proposed_action: str,
+        historical_action: str,
+        current_symptoms: list[str] | None = None,
+    ) -> tuple[bool, str, float, str]:
+        """
+        Compare semantic intent of a proposed remediation step against a historical action.
+
+        Returns:
+            (is_equivalent: bool, action_category: str, confidence: float, explanation: str)
+        """
+        prop_lower = proposed_action.lower()
+        hist_lower = historical_action.lower()
+
+        # Step 1: Detect semantic cluster for both actions
+        prop_cluster = cls.detect_action_cluster(prop_lower)
+        hist_cluster = cls.detect_action_cluster(hist_lower)
+
+        # If both belong to the exact same cluster
+        if prop_cluster and hist_cluster and prop_cluster == hist_cluster:
+            cluster_info = ACTION_SEMANTIC_CLUSTERS[prop_cluster]
+            explanation = (
+                f"Proposed action '{proposed_action}' shares semantic intent ({prop_cluster}) with "
+                f"historical action '{historical_action}': {cluster_info['failure_explanation']}"
+            )
+            return True, prop_cluster, 0.92, explanation
+
+        # If clusters differ explicitly (e.g. HORIZONTAL_SCALE vs POOL_EXPANSION_OVERCOMMIT)
+        if prop_cluster and hist_cluster and prop_cluster != hist_cluster:
+            explanation = (
+                f"Actions belong to distinct operational categories: "
+                f"'{proposed_action}' ({prop_cluster}) vs historical '{historical_action}' ({hist_cluster})."
+            )
+            return False, f"{prop_cluster}_VS_{hist_cluster}", 0.88, explanation
+
+        # Step 2: Fallback to token / phrase overlap for unclustered operational actions
+        prop_tokens = {w for w in re.findall(r"[a-z0-9_\-]+", prop_lower) if len(w) > 3}
+        hist_tokens = {w for w in re.findall(r"[a-z0-9_\-]+", hist_lower) if len(w) > 3}
+
+        if prop_tokens and hist_tokens:
+            overlap = prop_tokens.intersection(hist_tokens)
+            overlap_ratio = len(overlap) / min(len(prop_tokens), len(hist_tokens))
+            if overlap_ratio >= 0.5 or len(overlap) >= 2:
+                category = prop_cluster or hist_cluster or "SEMANTIC_OVERLAP"
+                explanation = (
+                    f"Substantial operational token alignment ({len(overlap)} matching terms: {', '.join(sorted(overlap))}) "
+                    f"between proposed action and historical record."
+                )
+                return True, category, round(0.70 + (overlap_ratio * 0.2), 2), explanation
+
+        category = prop_cluster or hist_cluster or "DISTINCT_ACTION"
+        return False, category, 0.80, "No semantic equivalence or intent overlap detected."
+
+    def evaluate_action_against_history(
+        self,
+        proposed_action: str,
+        current_symptoms: list[str] | None,
+        current_service: str | None,
+        recalled_memories: list[RecalledMemoryItem],
+    ) -> list[ActionEquivalenceEvaluation]:
+        """
+        Evaluate a proposed action against all historical lessons and failed fixes recalled from Hindsight.
+        Determines semantic equivalence, condition applicability, and safe alternatives.
+        """
+        evaluations: list[ActionEquivalenceEvaluation] = []
+        symptoms_text = " ".join(current_symptoms or []).lower()
+
+        # Extract failed warnings from memory
+        failed_warnings = self.extract_failed_approaches(recalled_memories)
+
+        for warning in failed_warnings:
+            hist_fix = warning.approach
+            is_equiv, cat, conf, explanation = self.compare_action_semantics(
+                proposed_action=proposed_action,
+                historical_action=hist_fix,
+                current_symptoms=current_symptoms,
+            )
+
+            if is_equiv:
+                # Check condition applicability: Is this action harmful under current symptoms?
+                cluster_data = ACTION_SEMANTIC_CLUSTERS.get(cat)
+                is_applicable = True
+                if cluster_data:
+                    harmful = cluster_data.get("harmful_symptoms", [])
+                    if any(h in symptoms_text for h in harmful):
+                        is_applicable = False
+                        explanation += f" Inapplicable under current conditions ({symptoms_text[:60]}...)."
+
+                evaluations.append(
+                    ActionEquivalenceEvaluation(
+                        is_equivalent=True,
+                        action_category=cat,
+                        historical_action=hist_fix,
+                        proposed_action=proposed_action,
+                        historical_outcome="FAILED",
+                        confidence=conf,
+                        explanation=explanation,
+                        is_applicable_under_current_conditions=is_applicable,
+                        suggested_alternative=warning.suggested_alternative
+                        or "Review verified effective resolution in memory.",
+                    )
+                )
+
+        return evaluations
+
     def detect_contradictions(
         self,
         proposed_action: str,
         recalled_memories: list[RecalledMemoryItem],
+        current_symptoms: list[str] | None = None,
     ) -> list[str]:
         """
         Check if a proposed action or hypothesis contradicts known operational memories.
+        Uses semantic equivalence matching and harmful condition detection.
         For example, proposing to flush Redis when prior memory INC-004 proved it causes DB collapse.
         """
         contradictions = []
         prop_lower = proposed_action.lower()
+        symptoms_text = " ".join(current_symptoms or []).lower()
 
         failed_warnings = self.extract_failed_approaches(recalled_memories)
         for w in failed_warnings:
-            approach_words = [w_tok for w_tok in w.approach.lower().split() if len(w_tok) > 4]
-            if approach_words and all(tok in prop_lower for tok in approach_words[:2]):
-                contradictions.append(
-                    f"Action '{proposed_action}' directly contradicts historical postmortem {w.historical_source_incident}: '{w.approach}'"
+            is_equiv, cat, conf, _ = self.compare_action_semantics(proposed_action, w.approach, current_symptoms)
+            if is_equiv:
+                src = w.historical_source_incident
+                cluster_data = ACTION_SEMANTIC_CLUSTERS.get(cat)
+                is_worsening = False
+                if cluster_data and any(h in symptoms_text for h in cluster_data.get("harmful_symptoms", [])):
+                    is_worsening = True
+
+                msg = (
+                    f"Action '{proposed_action}' matches previously failed mitigation from {src}: '{w.approach}' "
+                    f"(Category: {cat}, Confidence: {conf:.0%})."
                 )
+                if is_worsening:
+                    msg += " WARNING: Known to exacerbate system degradation under current active symptoms."
+                contradictions.append(msg)
+            else:
+                # Fallback to direct word check
+                approach_words = [w_tok for w_tok in w.approach.lower().split() if len(w_tok) > 4]
+                if approach_words and all(tok in prop_lower for tok in approach_words[:2]):
+                    contradictions.append(
+                        f"Action '{proposed_action}' directly contradicts historical postmortem {w.historical_source_incident}: '{w.approach}'"
+                    )
 
         return contradictions
 

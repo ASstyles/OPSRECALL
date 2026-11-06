@@ -154,6 +154,30 @@ class EvaluationFramework:
                 top_3_hit = True
                 break
 
+        # SRE Root Cause Match Classification Rubric
+        match_type = "UNSUPPORTED"
+        if result.hypotheses:
+            h1_text = result.hypotheses[0].hypothesis.lower()
+            h1_kw_match = sum(1 for kw in gt_keywords if kw in h1_text)
+            h1_domain_match = any(marker in h1_text for marker in category_markers)
+
+            symptom_terms = ["504", "500", "502", "latency", "slow", "error rate", "timeout", "spike", "elevated"]
+            is_symptom_only = any(st in h1_text for st in symptom_terms) and not (h1_kw_match >= 2 or h1_domain_match)
+
+            if top_1_hit:
+                if h1_kw_match >= 3 or ground_truth in h1_text:
+                    match_type = "EXACT"
+                else:
+                    match_type = "EQUIVALENT"
+            elif top_3_hit:
+                match_type = "PARTIAL"
+            elif is_symptom_only:
+                match_type = "SYMPTOM_ONLY"
+            else:
+                match_type = "INCORRECT"
+        else:
+            match_type = "UNSUPPORTED"
+
         # ----------------------------------------------------------------------
         # Dimension 3: Causal Reasoning Quality (0.0 - 1.0)
         # Evaluates signal -> change -> failure mechanism -> impact rather than just root cause matching
@@ -516,6 +540,7 @@ class EvaluationFramework:
             memory_mode=mode,
             top_1_root_cause_hit=top_1_hit,
             top_3_root_cause_hit=top_3_hit,
+            root_cause_match_type=match_type,
             causal_reasoning_score=causal_score,
             evidence_grounding_score=evidence_grounding_score,
             recommendation_grounding=recommendation_grounded,

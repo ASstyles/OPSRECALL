@@ -173,6 +173,20 @@ class FailedApproachWarning(BaseModel):
     suggested_alternative: str | None = None
 
 
+class ActionEquivalenceEvaluation(BaseModel):
+    """Semantic comparison between a proposed action and historical operational experiences."""
+
+    is_equivalent: bool
+    action_category: str
+    historical_action: str
+    proposed_action: str
+    historical_outcome: Literal["FAILED", "INCONCLUSIVE", "SUCCESSFUL", "UNATTEMPTED", "CONDITIONAL"] = "FAILED"
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    explanation: str
+    is_applicable_under_current_conditions: bool = True
+    suggested_alternative: str | None = None
+
+
 class InvestigationResult(BaseModel):
     """Complete structured investigation report."""
 
@@ -190,6 +204,7 @@ class InvestigationResult(BaseModel):
     historical_incidents_referenced: list[str] = Field(default_factory=list)
     previous_failed_approaches: list[FailedApproachWarning] = Field(default_factory=list)
     memory_contradictions_detected: list[str] = Field(default_factory=list)
+    action_evaluations: list[ActionEquivalenceEvaluation] = Field(default_factory=list)
     recommended_diagnostic_actions: list[ActionRecommendation] = Field(default_factory=list)
     recommended_remediation_steps: list[ActionRecommendation] = Field(default_factory=list)
     confidence_level: Literal["High", "Medium", "Low"] = "Medium"
@@ -244,6 +259,9 @@ class CaseEvaluationScore(BaseModel):
     # 1. Root Cause Identification
     top_1_root_cause_hit: bool = False
     top_3_root_cause_hit: bool = False
+    root_cause_match_type: Literal["EXACT", "EQUIVALENT", "PARTIAL", "SYMPTOM_ONLY", "INCORRECT", "UNSUPPORTED"] = (
+        "UNSUPPORTED"
+    )
 
     # 2. Causal Reasoning Quality (0.0 to 1.0)
     causal_reasoning_score: float = 0.0

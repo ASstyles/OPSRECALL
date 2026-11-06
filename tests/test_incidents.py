@@ -60,16 +60,17 @@ def test_service_health_summary(temp_db):
 
 
 def test_versioned_migrations_applied(temp_db):
-    """Verify that all schema versions (1 through 5) are recorded and applied in order."""
+    """Verify that all schema versions (1 through 6) are recorded and applied in order."""
     with temp_db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT version, name FROM schema_migrations ORDER BY version ASC")
         rows = cursor.fetchall()
         versions = [r[0] for r in rows]
-        assert versions == [1, 2, 3, 4, 5]
+        assert versions == [1, 2, 3, 4, 5, 6]
         names = [r[1] for r in rows]
         assert "core_tables_v1" in names
         assert "evaluation_16_dimensions_v5" in names
+        assert "action_eval_root_cause_match_v6" in names
 
 
 def test_legacy_schema_upgrade_preserves_records():
@@ -141,7 +142,7 @@ def test_migration_transaction_rollback_on_failure():
 
     with db.get_connection() as conn:
         with pytest.raises(RuntimeError) as exc_info:
-            migrations = [(6, "failing_migration_v6", failing_migration)]
+            migrations = [(7, "failing_migration_v7", failing_migration)]
             for version, name, func in migrations:
                 try:
                     with conn:
@@ -155,10 +156,60 @@ def test_migration_transaction_rollback_on_failure():
 
         assert "syntax error" in str(exc_info.value).lower()
 
-        # Verify transaction was rolled back (row not present) and version 6 was NOT recorded
+        # Verify transaction was rolled back (row not present) and version 7 was NOT recorded
         cursor = conn.cursor()
         cursor.execute("SELECT incident_id FROM incidents WHERE incident_id = 'INC-TEMP-FAIL'")
         assert cursor.fetchone() is None
 
-        cursor.execute("SELECT version FROM schema_migrations WHERE version = 6")
+        cursor.execute("SELECT version FROM schema_migrations WHERE version = 7")
         assert cursor.fetchone() is None
+
+
+def test_export_verified_incidents_json_and_backup(temp_db):
+    """Verify verified incident export and online database backup functionality."""
+    # Seed 1 unverified and 1 verified incident
+    inc_unverified = Incident(
+        incident_id="INC-UNVERIFIED-01",
+        incident_title="Unverified incident",
+        affected_service="api-gw",
+        severity="SEV-3",
+        symptoms=["Slight latency increase"],
+        is_verified=False,
+        actual_verified_root_cause=None,
+    )
+    inc_verified = Incident(
+        incident_id="INC-VERIFIED-01",
+        incident_title="Verified Incident Resolution",
+        affected_service="payment-api",
+        severity="SEV-1",
+        symptoms=["Checkout 500 spike"],
+        is_verified=True,
+        actual_verified_root_cause="Stripe webhook secret drift",
+        verified_by="Lead SRE",
+        resolution="Updated secret in Vault",
+    )
+    temp_db.upsert_incident(inc_unverified)
+    temp_db.upsert_incident(inc_verified)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        export_file = Path(tmp_dir) / "verified_export.json"
+        exported = temp_db.export_verified_incidents_json(export_path=export_file)
+
+        assert len(exported) >= 1
+        exported_ids = [e["incident_id"] for e in exported]
+        assert "INC-VERIFIED-01" in exported_ids
+        assert "INC-UNVERIFIED-01" not in exported_ids
+        assert export_file.exists()
+
+        # Test online backup
+        backup_target = Path(tmp_dir) / "test_backup.db"
+        res_path = temp_db.backup_database(backup_path=backup_target)
+        assert res_path == backup_target
+        assert backup_target.exists()
+        assert backup_target.stat().st_size > 0
+
+        # Verify backup contains the records
+        backup_db = DatabaseManager(db_path=str(backup_target))
+        fetched = backup_db.get_incident("INC-VERIFIED-01")
+        assert fetched is not None
+        assert fetched.verified_by == "Lead SRE"

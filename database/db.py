@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +26,16 @@ class DatabaseManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_schema()
 
-    def get_connection(self) -> sqlite3.Connection:
-        """Create and configure a SQLite connection."""
+    @contextmanager
+    def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
+        """Create, configure, and yield a SQLite connection with guaranteed cleanup."""
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def init_schema(self) -> None:
         """Initialize database schema via versioned transactional migrations."""
@@ -59,6 +65,7 @@ class DatabaseManager:
             (3, "investigation_structured_v3", self._migration_v3_investigation_structured),
             (4, "resolution_multistage_v4", self._migration_v4_resolution_multistage),
             (5, "evaluation_16_dimensions_v5", self._migration_v5_evaluation_16d),
+            (6, "action_eval_root_cause_match_v6", self._migration_v6_action_eval_root_cause_match),
         ]
 
         for version, name, func in migrations:
@@ -253,6 +260,23 @@ class DatabaseManager:
             ],
         )
 
+    def _migration_v6_action_eval_root_cause_match(self, conn: sqlite3.Connection) -> None:
+        """Version 6: Add action evaluations to investigations and root cause match type to evaluation_details."""
+        self._migrate_table(
+            conn,
+            "investigations",
+            [
+                ("action_evaluations", "TEXT"),
+            ],
+        )
+        self._migrate_table(
+            conn,
+            "evaluation_details",
+            [
+                ("root_cause_match_type", "TEXT DEFAULT 'UNSUPPORTED'"),
+            ],
+        )
+
     def _migrate_table(self, conn: sqlite3.Connection, table_name: str, columns: list[tuple[str, str]]) -> None:
         """Add missing columns to an existing SQLite table if not present."""
         cursor = conn.cursor()
@@ -342,9 +366,10 @@ class DatabaseManager:
                 INSERT OR REPLACE INTO investigations (
                     investigation_id, incident_id, mode, retrieval_mode_label, executive_summary,
                     hypotheses, recalled_memories, structured_retrievals, historical_incidents_referenced,
-                    previous_failed_approaches, memory_contradictions_detected, recommended_remediation_steps,
-                    confidence_level, llm_model, execution_time_seconds, created_at, raw_result
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    previous_failed_approaches, memory_contradictions_detected, action_evaluations,
+                    recommended_remediation_steps, confidence_level, llm_model, execution_time_seconds,
+                    created_at, raw_result
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.investigation_id,
@@ -358,6 +383,7 @@ class DatabaseManager:
                     json.dumps(result.historical_incidents_referenced),
                     json.dumps([f.model_dump() for f in result.previous_failed_approaches]),
                     json.dumps(result.memory_contradictions_detected),
+                    json.dumps([a.model_dump() for a in getattr(result, "action_evaluations", [])]),
                     json.dumps([r.model_dump() for r in result.recommended_remediation_steps]),
                     result.confidence_level,
                     result.llm_model,
@@ -478,6 +504,7 @@ class DatabaseManager:
                     """
                     INSERT INTO evaluation_details (
                         run_id, case_id, memory_mode, top_1_root_cause_hit, top_3_root_cause_hit,
+                        root_cause_match_type,
                         retrieved_expected_historical, recalled_failed_mitigations,
                         avoided_unsuccessful_mitigations, false_recall_flagged,
                         appropriate_uncertainty, is_safe_recommendation,
@@ -485,7 +512,7 @@ class DatabaseManager:
                         retrieval_precision, retrieval_recall, reciprocal_rank,
                         action_quality_score, confidence_calibration_error, brier_score,
                         overall_score, explanation
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         run_id,
@@ -493,6 +520,7 @@ class DatabaseManager:
                         d.memory_mode,
                         1 if getattr(d, "top_1_root_cause_hit", False) else 0,
                         1 if d.top_3_root_cause_hit else 0,
+                        getattr(d, "root_cause_match_type", "UNSUPPORTED"),
                         1 if d.retrieved_expected_historical else 0,
                         1 if d.recalled_failed_mitigations else 0,
                         1 if d.avoided_unsuccessful_mitigations else 0,
@@ -559,6 +587,48 @@ class DatabaseManager:
             content_hash=row["content_hash"] if "content_hash" in row.keys() else None,
             data_type=row["data_type"] if "data_type" in row.keys() else "INCIDENT_POSTMORTEM",
         )
+
+    def export_verified_incidents_json(self, export_path: str | Path | None = None) -> list[dict[str, Any]]:
+        """
+        Export all human-verified incidents to structured JSON format.
+        Preserves complete provenance, reviewer identity, and verified resolutions.
+        """
+        verified_incidents = [
+            inc
+            for inc in self.list_incidents()
+            if inc.is_verified
+            or (inc.actual_verified_root_cause is not None and len(inc.actual_verified_root_cause) > 0)
+        ]
+        records = [inc.model_dump() for inc in verified_incidents]
+        if export_path:
+            p = Path(export_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(records, f, indent=2)
+        return records
+
+    def backup_database(self, backup_path: str | Path | None = None) -> Path:
+        """
+        Create a consistent online SQLite backup safely copying the live database.
+        """
+        from datetime import datetime, timezone
+
+        if backup_path is None:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            target_path = self.db_path.parent / f"backup_opsrecall_{timestamp}.db"
+        else:
+            target_path = Path(backup_path)
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self.get_connection() as src_conn:
+            dest_conn = sqlite3.connect(str(target_path))
+            try:
+                src_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+
+        return target_path
 
 
 _db_instance: DatabaseManager | None = None

@@ -21,6 +21,7 @@ from core.incident_engine import get_incident_engine
 from core.llm_engine import LLMEngine, get_llm_engine
 from core.memory_manager import MemoryManager, get_memory_manager
 from core.validators import (
+    ActionEquivalenceEvaluation,
     ActionRecommendation,
     FailedApproachWarning,
     Hypothesis,
@@ -208,12 +209,19 @@ class InvestigationEngine:
                     )
                 )
 
-        # Check for contradictions against recalled historical memories
+        # Check for contradictions and semantic action equivalence against recalled historical memories
         contradictions_detected: list[str] = []
+        action_evaluations: list[ActionEquivalenceEvaluation] = []
         if memory_mode == "MEMORY_ENABLED" and recalled_memories:
             for rem in remediation_steps:
-                conflicts = self.memory_manager.detect_contradictions(rem.description, recalled_memories)
+                conflicts = self.memory_manager.detect_contradictions(
+                    rem.description, recalled_memories, current_symptoms=symptoms
+                )
                 contradictions_detected.extend(conflicts)
+                evals = self.memory_manager.evaluate_action_against_history(
+                    rem.description, symptoms, service, recalled_memories
+                )
+                action_evaluations.extend(evals)
 
         elapsed = round(time.time() - start_time, 3)
 
@@ -237,6 +245,7 @@ class InvestigationEngine:
             historical_incidents_referenced=hist_refs,
             previous_failed_approaches=failed_approaches,
             memory_contradictions_detected=contradictions_detected,
+            action_evaluations=action_evaluations,
             recommended_diagnostic_actions=diagnostic_actions,
             recommended_remediation_steps=remediation_steps,
             confidence_level=c_level,

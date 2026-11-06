@@ -1,0 +1,44 @@
+{
+  "bins_memory_enabled": [
+    {
+      "bin_range": "[0.0, 0.4]",
+      "count": 0,
+      "avg_confidence": 0.0,
+      "avg_accuracy": 0.0
+    },
+    {
+      "bin_range": "[0.4, 0.7]",
+      "count": 4,
+      "avg_confidence": 0.62,
+      "avg_accuracy": 1.0
+    },
+    {
+      "bin_range": "[0.7, 1.0]",
+      "count": 12,
+      "avg_confidence": 0.88,
+      "avg_accuracy": 1.0
+    }
+  ],
+  "bins_memory_disabled": [
+    {
+      "bin_range": "[0.0, 0.4]",
+      "count": 0,
+      "avg_confidence": 0.0,
+      "avg_accuracy": 0.0
+    },
+    {
+      "bin_range": "[0.4, 0.7]",
+      "count": 9,
+      "avg_confidence": 0.62,
+      "avg_accuracy": 0.556
+    },
+    {
+      "bin_range": "[0.7, 1.0]",
+      "count": 7,
+      "avg_confidence": 0.88,
+      "avg_accuracy": 1.0
+    }
+  ],
+  "sample_size": 16,
+  "notes": "Partitioned into 3 reliability bins: Low [0, 0.4), Med [0.4, 0.7), High [0.7, 1.0]. Evaluated against Top-1 correctness labels."
+}
