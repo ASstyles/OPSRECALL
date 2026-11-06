@@ -3,11 +3,15 @@ UI tests for Streamlit application using official Streamlit AppTest framework.
 Verifies all 7 sections of OPSRECALL dashboard render without exceptions.
 """
 
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
+
+APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def test_command_center_renders_cleanly():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     assert not at.exception
     assert len(at.title) >= 1
@@ -16,7 +20,7 @@ def test_command_center_renders_cleanly():
 
 
 def test_navigation_to_incident_console():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("Incident Console").run(timeout=15)
@@ -25,7 +29,7 @@ def test_navigation_to_incident_console():
 
 
 def test_navigation_to_investigation_and_comparison():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("AI Investigation & Comparison").run(timeout=15)
@@ -34,7 +38,7 @@ def test_navigation_to_investigation_and_comparison():
 
 
 def test_navigation_to_memory_explorer():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("Memory Explorer").run(timeout=15)
@@ -43,7 +47,7 @@ def test_navigation_to_memory_explorer():
 
 
 def test_navigation_to_learning_center():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("Learning Center").run(timeout=15)
@@ -52,7 +56,7 @@ def test_navigation_to_learning_center():
 
 
 def test_navigation_to_evaluation_lab():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("Evaluation Lab").run(timeout=15)
@@ -61,7 +65,7 @@ def test_navigation_to_evaluation_lab():
 
 
 def test_navigation_to_architecture():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(str(APP_PATH))
     at.run(timeout=15)
     sidebar_radio = at.sidebar.radio[0]
     sidebar_radio.set_value("Architecture & About").run(timeout=15)
