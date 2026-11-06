@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from core.incident_engine import get_incident_engine
 from core.llm_engine import LLMEngine, get_llm_engine
@@ -209,13 +209,13 @@ class InvestigationEngine:
                     )
                 )
 
-        # Check for contradictions and semantic action equivalence against recalled historical memories
+        # Check for contradictions and semantic action equivalence across all recommendations
         contradictions_detected: list[str] = []
         action_evaluations: list[ActionEquivalenceEvaluation] = []
         if memory_mode == "MEMORY_ENABLED" and recalled_memories:
-            for rem in remediation_steps:
+            for rem in remediation_steps + diagnostic_actions:
                 conflicts = self.memory_manager.detect_contradictions(
-                    rem.description, recalled_memories, current_symptoms=symptoms
+                    rem.description, recalled_memories, current_symptoms=symptoms, current_service=service
                 )
                 contradictions_detected.extend(conflicts)
                 evals = self.memory_manager.evaluate_action_against_history(
@@ -232,6 +232,22 @@ class InvestigationEngine:
         else:
             num_conf = float(num_conf)
 
+        # Precise provenance determination
+        is_live_mem = bool(self.memory_manager.client.is_configured)
+        is_live_llm = bool(getattr(self.llm_engine, "client", None) is not None)
+        is_simulated = not (is_live_mem and is_live_llm)
+
+        mem_conn_state: Literal["LIVE_CONNECTED", "OFFLINE_PREVIEW", "DISABLED", "CONNECTION_ERROR"] = (
+            "DISABLED" if memory_mode == "MEMORY_DISABLED" else ("LIVE_CONNECTED" if is_live_mem else "OFFLINE_PREVIEW")
+        )
+        model_conn_state: Literal["LIVE_CONNECTED", "OFFLINE_RULE_BASED", "FALLBACK_CASCADE", "ERROR"] = (
+            "LIVE_CONNECTED" if is_live_llm else "OFFLINE_RULE_BASED"
+        )
+        model_id = (
+            llm_output.get("llm_model", "groq:openai/gpt-oss-120b") if is_live_llm else "deterministic-offline-reasoner"
+        )
+        ranked_candidates = self.memory_manager.to_canonical_candidates(structured_retrievals)
+
         result = InvestigationResult(
             investigation_id=investigation_id,
             incident_id=inc_id,
@@ -242,6 +258,7 @@ class InvestigationEngine:
             evidence_summary=symptoms + error_logs[:2],
             recalled_memories=recalled_memories,
             structured_retrievals=structured_retrievals,
+            ranked_candidates=ranked_candidates,
             historical_incidents_referenced=hist_refs,
             previous_failed_approaches=failed_approaches,
             memory_contradictions_detected=contradictions_detected,
@@ -253,9 +270,15 @@ class InvestigationEngine:
             numerical_confidence=num_conf,
             missing_information=llm_output.get("missing_information", []),
             requires_human_intervention=True,
-            is_simulated=True,
+            memory_provider="Hindsight Cloud",
+            memory_connection_state=mem_conn_state,
+            model_provider="Groq",
+            model_connection_state=model_conn_state,
+            fallback_used=not is_live_llm,
+            is_simulated=is_simulated,
+            live_verification_occurred=bool(is_live_mem and is_live_llm),
             execution_time_seconds=elapsed,
-            llm_model=llm_output.get("llm_model", "groq:openai/gpt-oss-120b"),
+            llm_model=model_id,
         )
 
         # 6. Save audit record to SQLite

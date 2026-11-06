@@ -213,3 +213,42 @@ def test_export_verified_incidents_json_and_backup(temp_db):
         fetched = backup_db.get_incident("INC-VERIFIED-01")
         assert fetched is not None
         assert fetched.verified_by == "Lead SRE"
+
+
+def test_database_persistence_across_reconnects_and_backup_restore():
+    """Verify that records persist across manager instantiation and can be restored from backups."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_file = Path(tmp_dir) / "persistence_test.db"
+        backup_file = Path(tmp_dir) / "restored_backup.db"
+
+        # 1. Create and write record
+        db1 = DatabaseManager(db_path=str(db_file))
+        inc = Incident(
+            incident_id="INC-PERSIST-99",
+            incident_title="Database Connection Pool Saturation Under Spike",
+            affected_service="order-processor",
+            severity="SEV-1",
+            symptoms=["High connection wait times", "Connection pool exhausted"],
+            actual_verified_root_cause="HikariCP connection leak in payment worker",
+            is_verified=True,
+            verified_by="Principal SRE",
+        )
+        db1.upsert_incident(inc)
+
+        # 2. Re-open database with a completely new manager instance
+        db2 = DatabaseManager(db_path=str(db_file))
+        fetched = db2.get_incident("INC-PERSIST-99")
+        assert fetched is not None
+        assert fetched.affected_service == "order-processor"
+        assert fetched.verified_by == "Principal SRE"
+
+        # 3. Create backup and open from restored file
+        db2.backup_database(backup_path=backup_file)
+        assert backup_file.exists()
+        assert backup_file.stat().st_size > 0
+
+        db_restored = DatabaseManager(db_path=str(backup_file))
+        restored_inc = db_restored.get_incident("INC-PERSIST-99")
+        assert restored_inc is not None
+        assert restored_inc.incident_id == "INC-PERSIST-99"
+        assert restored_inc.actual_verified_root_cause == "HikariCP connection leak in payment worker"

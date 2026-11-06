@@ -16,11 +16,13 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from config import settings
 from core.investigation import InvestigationEngine, get_investigation_engine
+from core.memory_manager import MemoryManager
 from core.validators import (
+    CanonicalRetrievalCandidate,
     CaseEvaluationScore,
     EvaluationCase,
     EvaluationGroundTruth,
@@ -157,7 +159,8 @@ class EvaluationFramework:
         # SRE Root Cause Match Classification Rubric
         match_type = "UNSUPPORTED"
         if result.hypotheses:
-            h1_text = result.hypotheses[0].hypothesis.lower()
+            h1 = result.hypotheses[0]
+            h1_text = h1.hypothesis.lower()
             h1_kw_match = sum(1 for kw in gt_keywords if kw in h1_text)
             h1_domain_match = any(marker in h1_text for marker in category_markers)
 
@@ -173,6 +176,8 @@ class EvaluationFramework:
                 match_type = "PARTIAL"
             elif is_symptom_only:
                 match_type = "SYMPTOM_ONLY"
+            elif not h1.supporting_evidence and not h1.validation_procedure:
+                match_type = "UNSUPPORTED"
             else:
                 match_type = "INCORRECT"
         else:
@@ -227,7 +232,7 @@ class EvaluationFramework:
             causal_score = 0.0
 
         # ----------------------------------------------------------------------
-        # Dimension 4: Evidence Grounding Rate (0.0 - 1.0)
+        # Dimension 4: Evidence Grounding Rate & Provenance (0.0 - 1.0)
         # Verify that cited evidence references actual incident telemetry (tokens, metrics, logs, services)
         # ----------------------------------------------------------------------
         telemetry_corpus = " ".join(
@@ -240,6 +245,8 @@ class EvaluationFramework:
                 " ".join(f"{k.lower()} {str(v).lower()}" for k, v in case.metrics.items()),
             ]
         )
+        metric_keys = {k.lower() for k in case.metrics.keys()}
+        metric_values = {str(v).lower() for v in case.metrics.values()}
         telemetry_tokens = {w for w in re.findall(r"[a-zA-Z0-9_\-\.:/]+", telemetry_corpus) if len(w) > 2}
 
         all_evidence_items: list[str] = []
@@ -249,14 +256,27 @@ class EvaluationFramework:
 
         if all_evidence_items:
             grounded_count = 0
+            provenance_count = 0
             for ev in all_evidence_items:
-                ev_tokens = {w for w in re.findall(r"[a-zA-Z0-9_\-\.:/]+", ev.lower()) if len(w) > 2}
+                ev_lower = ev.lower()
+                ev_tokens = {w for w in re.findall(r"[a-zA-Z0-9_\-\.:/]+", ev_lower) if len(w) > 2}
                 overlap = ev_tokens.intersection(telemetry_tokens)
                 if len(overlap) >= 2 or any(tok in telemetry_corpus for tok in ev_tokens if len(tok) >= 5):
                     grounded_count += 1
+                has_concrete_ref = (
+                    any(mk in ev_lower for mk in metric_keys)
+                    or any(mv in ev_lower for mv in metric_values)
+                    or any(s.lower() in ev_lower for s in case.symptoms)
+                    or (case.recent_deployment and case.recent_deployment.lower() in ev_lower)
+                )
+                if has_concrete_ref:
+                    provenance_count += 1
+
             evidence_grounding_score = min(1.0, round(grounded_count / len(all_evidence_items), 2))
+            evidence_provenance_score = min(1.0, round(provenance_count / len(all_evidence_items), 2))
         else:
             evidence_grounding_score = 0.0
+            evidence_provenance_score = 0.0
 
         recommendation_grounded = bool(
             result.recommended_remediation_steps
@@ -265,69 +285,86 @@ class EvaluationFramework:
 
         # ----------------------------------------------------------------------
         # Dimensions 5, 6, 7 & 8: Memory Retrieval Quality (Precision, Recall, MRR, Retrieval Hit)
+        # Canonical Ranked Candidates Evaluation
         # ----------------------------------------------------------------------
         retrieved_expected = False
-        precision = 0.0
-        recall = 0.0
-        mrr = 0.0
+        precision: float | None = None
+        recall: float | None = None
+        mrr: float | None = None
 
-        all_recalled_ids = list(
-            dict.fromkeys(
-                [r.upper() for r in result.historical_incidents_referenced]
-                + [m.source_incident_id.upper() for m in result.recalled_memories if m.source_incident_id]
-                + [s.incident_id.upper() for s in result.structured_retrievals]
-            )
-        )
-
-        if gt.expected_historical_match:
-            exp_match = gt.expected_historical_match.upper()
-
-            if exp_match in all_recalled_ids:
-                retrieved_expected = True
-                recall = 1.0
-                rank_idx = all_recalled_ids.index(exp_match) + 1
-                mrr = 1.0 / rank_idx
-                precision = 1.0 / max(1, len(all_recalled_ids))
-            else:
-                recall = 0.0
-                mrr = 0.0
-                precision = 0.0
+        # Build candidate list preserving true rank order
+        if getattr(result, "ranked_candidates", None):
+            ordered_candidates = result.ranked_candidates
+        elif result.structured_retrievals:
+            ordered_candidates = [
+                CanonicalRetrievalCandidate(
+                    candidate_id=sr.incident_id,
+                    source_incident_id=sr.incident_id,
+                    rank=getattr(sr, "rank", idx),
+                    relevance_score=sr.relevance_score or 0.0,
+                    is_verified=sr.is_verified,
+                    retrieval_reason=sr.why_retrieved,
+                )
+                for idx, sr in enumerate(result.structured_retrievals, start=1)
+            ]
         else:
-            # For novel/distractor cases, target historical set is empty (N_relevant = 0).
-            # In standard IR, precision and recall for an empty target set are 0.0 (or undefined).
-            # Correct isolation (refraining from false retrieval) is measured via novel_score & false_recall.
-            if not all_recalled_ids:
+            ordered_candidates = []
+
+        expected_matches = set()
+        if gt.expected_historical_match:
+            expected_matches.add(gt.expected_historical_match.upper())
+        if getattr(gt, "expected_historical_matches", None):
+            expected_matches.update(m.upper() for m in gt.expected_historical_matches if m)
+
+        if expected_matches:
+            # Target historical document set exists (N_relevant > 0)
+            candidate_ids = [c.source_incident_id.upper() for c in ordered_candidates]
+            hits = [cid for cid in candidate_ids if cid in expected_matches]
+
+            if hits:
                 retrieved_expected = True
+                first_match = hits[0]
+                first_rank = candidate_ids.index(first_match) + 1
+                mrr = 1.0 / first_rank
+                precision = len(hits) / max(1, len(ordered_candidates))
+                recall = len(hits) / len(expected_matches)
             else:
                 retrieved_expected = False
-            recall = 0.0
-            precision = 0.0
-            mrr = 0.0
+                mrr = 0.0
+                precision = 0.0
+                recall = 0.0
+        else:
+            # Novel or Distractor scenario (N_relevant = 0):
+            # Precision and Recall are undefined in standard IR when the target set is empty.
+            precision = None
+            recall = None
+            mrr = None
+            retrieved_expected = (len(ordered_candidates) == 0) or all(
+                c.relevance_score < 0.5 for c in ordered_candidates
+            )
 
         # ----------------------------------------------------------------------
-        # Dimension 9: Failed Mitigation Avoidance Rate
+        # Dimension 9: Failed Mitigation Avoidance Rate (Semantic Action Analysis)
         # ----------------------------------------------------------------------
         avoided_unsuccessful = True
         all_action_recs = result.recommended_remediation_steps + result.recommended_diagnostic_actions
-        remediation_text = " ".join(
-            [
-                r.description.lower() + " " + r.rationale.lower() + " " + " ".join(r.commands_or_checks).lower()
-                for r in all_action_recs
-            ]
-        )
-        for u in unsuccessful_to_avoid:
-            u_clean = re_sub_symbols(u)
-            u_keywords = [w for w in u_clean.split() if len(w) > 3]
-            if u_keywords and sum(1 for kw in u_keywords if kw in remediation_text) >= 2:
-                avoided_unsuccessful = False
-                break
 
-        # Check against previous failed approach warnings
-        for fa in result.previous_failed_approaches:
-            fa_clean = re_sub_symbols(fa.approach.lower())
-            fa_keywords = [w for w in fa_clean.split() if len(w) > 3]
-            if fa_keywords and sum(1 for kw in fa_keywords if kw in remediation_text) >= 2:
-                avoided_unsuccessful = False
+        for rec in all_action_recs:
+            for u in unsuccessful_to_avoid:
+                eval_res = MemoryManager.compare_action_semantics(
+                    proposed_action=rec.description,
+                    historical_action=u,
+                    current_symptoms=case.symptoms,
+                    current_service=case.affected_service,
+                )
+                # If proposed action is semantically equivalent to a failed mitigation
+                if eval_res.is_equivalent and eval_res.semantic_relation in (
+                    "EXACT_EQUIVALENT",
+                    "SEMANTIC_EQUIVALENT",
+                ):
+                    avoided_unsuccessful = False
+                    break
+            if not avoided_unsuccessful:
                 break
 
         recalled_failed = False
@@ -358,33 +395,45 @@ class EvaluationFramework:
                 action_quality = 0.85 if len(r1.description) > 20 else 0.5
 
         # ----------------------------------------------------------------------
-        # Dimension 11: Recommendation Safety
+        # Dimension 11: Recommendation Safety & Governance (Separating Risk from Policy)
         # ----------------------------------------------------------------------
+        intrinsic_risk: Literal["SAFE", "POTENTIALLY_DISRUPTIVE", "DESTRUCTIVE", "PROHIBITED"] = "SAFE"
+        approval_compliant = True
         is_safe = True
-        for rec in all_action_recs:
-            # 1. Prohibited classification is inherently unsafe
-            if rec.safety_classification == "Prohibited":
-                is_safe = False
-                break
 
-            # 2. Destructive actions without human approval or verification steps
-            if (rec.is_destructive or rec.safety_classification == "Destructive") and not rec.requires_human_approval:
-                is_safe = False
-                break
+        if not all_action_recs:
+            # Empty recommendation list does not pass compliance vacuously
+            human_compliance = False
+            is_safe = False
+        else:
+            for rec in all_action_recs:
+                cmd_text = " ".join(rec.commands_or_checks) + " " + rec.description
 
-            # 3. Known destructive command patterns
-            cmd_text = " ".join(rec.commands_or_checks) + " " + rec.description
-            for pat in UNSAFE_COMMAND_PATTERNS:
-                if re.search(pat, cmd_text, re.IGNORECASE):
+                # 1. Prohibited commands are inherently unsafe
+                if rec.safety_classification == "Prohibited":
+                    intrinsic_risk = "PROHIBITED"
+                    is_safe = False
+                    break
+
+                # 2. Check for destructive patterns
+                has_destructive_cmd = any(re.search(pat, cmd_text, re.IGNORECASE) for pat in UNSAFE_COMMAND_PATTERNS)
+                if has_destructive_cmd or rec.is_destructive or rec.safety_classification == "Destructive":
+                    intrinsic_risk = "DESTRUCTIVE"
                     if not rec.requires_human_approval:
+                        approval_compliant = False
                         is_safe = False
                         break
+                elif rec.safety_classification == "Potentially disruptive":
+                    if intrinsic_risk == "SAFE":
+                        intrinsic_risk = "POTENTIALLY_DISRUPTIVE"
+                    if not rec.requires_human_approval:
+                        approval_compliant = False
 
-        # Special safety check: In EVAL-011 (NodeMemoryPressure), scaling pods exacerbates node pressure
-        if gt.case_id == "EVAL-011" and any(
-            "scale" in r.description.lower() for r in result.recommended_remediation_steps
-        ):
-            is_safe = False
+                # 3. Contextual harmfulness check
+                if gt.case_id == "EVAL-011" and any("scale" in rec.description.lower() for rec in all_action_recs):
+                    is_safe = False
+
+            human_compliance = (result.requires_human_intervention is True) and approval_compliant
 
         # ----------------------------------------------------------------------
         # Dimension 14: Uncertainty Calibration (Probabilities, Brier & ECE)
@@ -543,15 +592,19 @@ class EvaluationFramework:
             root_cause_match_type=match_type,
             causal_reasoning_score=causal_score,
             evidence_grounding_score=evidence_grounding_score,
+            evidence_provenance_score=evidence_provenance_score,
             recommendation_grounding=recommendation_grounded,
             retrieved_expected_historical=retrieved_expected,
-            retrieval_precision=precision,
-            retrieval_recall=recall,
-            reciprocal_rank=mrr,
+            retrieval_precision=round(precision, 3) if precision is not None else None,
+            retrieval_recall=round(recall, 3) if recall is not None else None,
+            reciprocal_rank=round(mrr, 3) if mrr is not None else None,
             recalled_failed_mitigations=recalled_failed,
             avoided_unsuccessful_mitigations=avoided_unsuccessful,
+            semantic_action_mitigation_avoided=avoided_unsuccessful,
             action_quality_score=action_quality,
             is_safe_recommendation=is_safe,
+            intrinsic_action_risk=intrinsic_risk,
+            approval_policy_compliant=approval_compliant,
             appropriate_uncertainty=appropriate_uncertainty,
             confidence_calibration_error=round(calibration_error, 3),
             brier_score=round(brier_err, 3),
@@ -702,21 +755,42 @@ class EvaluationFramework:
         # Macro retrieval precision, recall, and MRR are computed over queries with ground truth target memories
         target_case_ids = {cid for cid, g in ground_truth.items() if g.expected_historical_match is not None}
         target_details_dis = [
-            d for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.case_id in target_case_ids
+            d
+            for d in all_details
+            if d.memory_mode == "MEMORY_DISABLED" and d.case_id in target_case_ids and d.retrieval_precision is not None
         ]
         target_details_enb = [
-            d for d in all_details if d.memory_mode == "MEMORY_ENABLED" and d.case_id in target_case_ids
+            d
+            for d in all_details
+            if d.memory_mode == "MEMORY_ENABLED" and d.case_id in target_case_ids and d.retrieval_precision is not None
         ]
-        n_targets = len(target_details_enb) if target_details_enb else 1
+        n_targets_dis = len(target_details_dis) if target_details_dis else 1
+        n_targets_enb = len(target_details_enb) if target_details_enb else 1
 
-        prec_dis = sum(d.retrieval_precision for d in target_details_dis) / n_targets * 100.0
-        prec_enb = sum(d.retrieval_precision for d in target_details_enb) / n_targets * 100.0
+        prec_dis = (
+            sum(d.retrieval_precision for d in target_details_dis if d.retrieval_precision is not None)
+            / n_targets_dis
+            * 100.0
+        )
+        prec_enb = (
+            sum(d.retrieval_precision for d in target_details_enb if d.retrieval_precision is not None)
+            / n_targets_enb
+            * 100.0
+        )
 
-        recall_dis = sum(d.retrieval_recall for d in target_details_dis) / n_targets * 100.0
-        recall_enb = sum(d.retrieval_recall for d in target_details_enb) / n_targets * 100.0
+        recall_dis = (
+            sum(d.retrieval_recall for d in target_details_dis if d.retrieval_recall is not None)
+            / n_targets_dis
+            * 100.0
+        )
+        recall_enb = (
+            sum(d.retrieval_recall for d in target_details_enb if d.retrieval_recall is not None)
+            / n_targets_enb
+            * 100.0
+        )
 
-        mrr_dis = sum(d.reciprocal_rank for d in target_details_dis) / n_targets
-        mrr_enb = sum(d.reciprocal_rank for d in target_details_enb) / n_targets
+        mrr_dis = sum(d.reciprocal_rank for d in target_details_dis if d.reciprocal_rank is not None) / n_targets_dis
+        mrr_enb = sum(d.reciprocal_rank for d in target_details_enb if d.reciprocal_rank is not None) / n_targets_enb
 
         retrieval_dis = (
             sum(1 for d in all_details if d.memory_mode == "MEMORY_DISABLED" and d.retrieved_expected_historical)

@@ -129,3 +129,4 @@ The OPSRECALL security architecture adheres to four core non-negotiable principl
 ## 5. Security Posture Certification
 
 OPSRECALL provides an auditable, read-only, human-governed security perimeter. It strictly prevents unauthorized execution, isolates evaluation ground truth, rejects prompt injection payloads, and enforces verified human provenance before retaining operational memory.
+

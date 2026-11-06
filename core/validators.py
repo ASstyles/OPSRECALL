@@ -84,6 +84,7 @@ class EvaluationGroundTruth(BaseModel):
     scenario_type: str = Field(default="recurrent_incident")
     ground_truth_root_cause: str
     expected_historical_match: str | None = None
+    expected_historical_matches: list[str] = Field(default_factory=list)
     unsuccessful_mitigations_to_avoid: list[str] = Field(default_factory=list)
     expected_optimal_first_action: str | None = None
     is_distractor: bool = False
@@ -116,6 +117,7 @@ class StructuredRetrievalResult(BaseModel):
     incident_id: str
     title: str
     service: str
+    rank: int = Field(default=1, ge=1)
     why_retrieved: str
     matching_evidence: list[str] = Field(default_factory=list)
     relevance_score: float | None = None
@@ -173,18 +175,86 @@ class FailedApproachWarning(BaseModel):
     suggested_alternative: str | None = None
 
 
+class ActionIntent(BaseModel):
+    """Normalized structured representation of an SRE operational action."""
+
+    raw_description: str
+    action_verb: str = ""
+    action_polarity: Literal["POSITIVE", "NEGATIVE", "NEGATED"] = "POSITIVE"
+    operation_category: str = "UNKNOWN"
+    target_resource: str = ""
+    resource_type: Literal["POD", "WORKER", "CACHE", "DATABASE", "NETWORK", "CONFIGURATION", "GENERIC"] = "GENERIC"
+    target_service: str | None = None
+    scope: Literal["CLUSTER", "SERVICE", "RESOURCE", "DATABASE", "GLOBAL"] = "SERVICE"
+    direction_of_change: Literal[
+        "INCREASE", "DECREASE", "RESET", "RESTART", "PURGE", "PRESERVE", "NO_CHANGE", "UNKNOWN"
+    ] = "UNKNOWN"
+    magnitude_or_value: str | None = None
+    preconditions: list[str] = Field(default_factory=list)
+    expected_operational_effect: str = ""
+    reversibility: Literal["Fully Reversible", "Partially Reversible", "Irreversible"] = "Fully Reversible"
+    potential_blast_radius: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = "MEDIUM"
+    requires_human_approval: bool = True
+    relevant_environmental_conditions: list[str] = Field(default_factory=list)
+
+
+class CanonicalRetrievalCandidate(BaseModel):
+    """Canonical representation of a ranked retrieval candidate preserving exact rank order."""
+
+    candidate_id: str
+    source_incident_id: str
+    rank: int = Field(..., ge=1)
+    relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    ranking_factors: dict[str, float] = Field(default_factory=dict)
+    source: str = "HINDSIGHT"
+    is_verified: bool = False
+    retrieval_reason: str = ""
+
+
 class ActionEquivalenceEvaluation(BaseModel):
     """Semantic comparison between a proposed action and historical operational experiences."""
 
-    is_equivalent: bool
-    action_category: str
+    semantic_relation: Literal[
+        "EXACT_EQUIVALENT",
+        "SEMANTIC_EQUIVALENT",
+        "RELATED_BUT_DISTINCT",
+        "OPPOSITE_ACTION",
+        "NEGATED_ACTION",
+        "CONDITIONALLY_EQUIVALENT",
+        "UNKNOWN",
+        "INSUFFICIENT_CONTEXT",
+    ] = "UNKNOWN"
+    is_equivalent: bool = False
+    action_category: str = "UNKNOWN"
     historical_action: str
     proposed_action: str
-    historical_outcome: Literal["FAILED", "INCONCLUSIVE", "SUCCESSFUL", "UNATTEMPTED", "CONDITIONAL"] = "FAILED"
+    historical_outcome: Literal[
+        "FAILED",
+        "SUCCESSFUL",
+        "INCONCLUSIVE",
+        "UNATTEMPTED",
+        "CONDITIONALLY_SUCCESSFUL",
+        "CONDITIONALLY_FAILED",
+    ] = "FAILED"
+    matched_fields: list[str] = Field(default_factory=list)
+    conflicting_fields: list[str] = Field(default_factory=list)
+    similarity_score: float = Field(default=0.0, ge=0.0, le=1.0)
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
-    explanation: str
+    explanation: str = ""
+    historical_provenance: str | None = None
     is_applicable_under_current_conditions: bool = True
+    applicability_decision: Literal[
+        "INAPPLICABLE",
+        "POTENTIALLY_HARMFUL",
+        "SAFE_UNDER_CONDITIONS",
+        "INSUFFICIENT_TELEMETRY",
+        "REQUIRES_HUMAN_INVESTIGATION",
+    ] = "SAFE_UNDER_CONDITIONS"
     suggested_alternative: str | None = None
+
+    def __iter__(self):
+        """Enable transparent tuple unpacking for backwards compatibility."""
+        return iter((self.is_equivalent, self.action_category, self.confidence, self.explanation))
 
 
 class InvestigationResult(BaseModel):
@@ -201,6 +271,7 @@ class InvestigationResult(BaseModel):
     evidence_summary: list[str] = Field(default_factory=list)
     recalled_memories: list[RecalledMemoryItem] = Field(default_factory=list)
     structured_retrievals: list[StructuredRetrievalResult] = Field(default_factory=list)
+    ranked_candidates: list[CanonicalRetrievalCandidate] = Field(default_factory=list)
     historical_incidents_referenced: list[str] = Field(default_factory=list)
     previous_failed_approaches: list[FailedApproachWarning] = Field(default_factory=list)
     memory_contradictions_detected: list[str] = Field(default_factory=list)
@@ -212,7 +283,20 @@ class InvestigationResult(BaseModel):
     numerical_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     missing_information: list[str] = Field(default_factory=list)
     requires_human_intervention: bool = True
-    is_simulated: bool = True
+
+    # Explicit provenance separation
+    memory_provider: str = "Hindsight Cloud"
+    memory_connection_state: Literal["LIVE_CONNECTED", "OFFLINE_PREVIEW", "DISABLED", "CONNECTION_ERROR"] = (
+        "OFFLINE_PREVIEW"
+    )
+    model_provider: str = "Groq"
+    model_connection_state: Literal["LIVE_CONNECTED", "OFFLINE_RULE_BASED", "FALLBACK_CASCADE", "ERROR"] = (
+        "OFFLINE_RULE_BASED"
+    )
+    fallback_used: bool = False
+    is_simulated: bool = False
+    live_verification_occurred: bool = False
+
     execution_time_seconds: float = 0.0
     llm_model: str = ""
     created_at: str = Field(default_factory=current_iso_time)
@@ -266,25 +350,29 @@ class CaseEvaluationScore(BaseModel):
     # 2. Causal Reasoning Quality (0.0 to 1.0)
     causal_reasoning_score: float = 0.0
 
-    # 3. Evidence Grounding
+    # 3. Evidence Grounding & Provenance
     evidence_grounding_score: float = 0.0
+    evidence_provenance_score: float = 1.0
     recommendation_grounding: bool = True
 
-    # 4. Memory Retrieval Quality
+    # 4. Memory Retrieval Quality (Canonical IR)
     retrieved_expected_historical: bool = False
-    retrieval_precision: float = 0.0
-    retrieval_recall: float = 0.0
-    reciprocal_rank: float = 0.0
+    retrieval_precision: float | None = None
+    retrieval_recall: float | None = None
+    reciprocal_rank: float | None = None
 
-    # 5. Failed Mitigation Avoidance
+    # 5. Failed Mitigation Avoidance (Semantic Action Analysis)
     recalled_failed_mitigations: bool = False
     avoided_unsuccessful_mitigations: bool = True
+    semantic_action_mitigation_avoided: bool = True
 
     # 6. Recommended Action Quality (0.0 to 1.0)
     action_quality_score: float = 0.0
 
-    # 7. Safety (Unsafe recommendations flagged/prevented)
+    # 7. Safety (Separate Intrinsic Risk from Approval-Policy Compliance)
     is_safe_recommendation: bool = True
+    intrinsic_action_risk: Literal["SAFE", "POTENTIALLY_DISRUPTIVE", "DESTRUCTIVE", "PROHIBITED"] = "SAFE"
+    approval_policy_compliant: bool = True
 
     # 8. Calibration & Uncertainty
     appropriate_uncertainty: bool = True
